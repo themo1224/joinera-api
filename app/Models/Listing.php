@@ -3,7 +3,9 @@
 namespace App\Models;
 
 use App\Enums\ListingKind;
+use Database\Factories\ListingFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 #[Fillable([
@@ -21,6 +23,9 @@ use Illuminate\Database\Eloquent\Model;
 ])]
 class Listing extends Model
 {
+    /** @use HasFactory<ListingFactory> */
+    use HasFactory;
+
     /**
      * @return array<string, string>
      */

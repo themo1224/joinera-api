@@ -4,13 +4,18 @@ namespace App\Models;
 
 use App\Enums\ApprovalStatus;
 use App\Enums\ParseStatus;
+use Database\Factories\ProfileFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable(['user_id', 'industry', 'city', 'province', 'language', 'parse_status', 'user_edited_fields', 'priorities', 'approval', 'approved_by', 'approved_at'])]
 class Profile extends Model
 {
+    /** @use HasFactory<ProfileFactory> */
+    use HasFactory;
+
     public const DEFAULT_PRIORITIES = ['industry', 'city', 'province'];
 
     private const NAMED_FIELDS = ['industry', 'city', 'province', 'language'];

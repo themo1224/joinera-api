@@ -3,8 +3,10 @@
 namespace App\Models;
 
 use App\Enums\SiteIdentityState;
+use Database\Factories\SiteIdentityFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -12,6 +14,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Hidden(['secret'])]
 class SiteIdentity extends Model
 {
+    /** @use HasFactory<SiteIdentityFactory> */
+    use HasFactory;
+
     /**
      * @return BelongsTo<User, $this>
      */

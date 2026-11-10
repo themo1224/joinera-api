@@ -27,7 +27,11 @@ class MailboxIdentityFactory extends Factory
             'user_id' => User::factory(),
             'domain' => $domain,
             'address' => 'hello@'.$domain,
+            'password' => 'secret-mailbox-password',
+            'provider' => 'gmx',
             'state' => MailboxState::Pending,
+            'last_synced_at' => null,
+            'last_sync_error' => null,
         ];
     }
 
@@ -35,6 +39,9 @@ class MailboxIdentityFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'state' => MailboxState::Ready,
+            'domain' => 'gmx.de',
+            'address' => 'candidate.'.Str::lower(fake()->unique()->bothify('####')).'@gmx.de',
+            'password' => 'secret-mailbox-password',
         ]);
     }
 

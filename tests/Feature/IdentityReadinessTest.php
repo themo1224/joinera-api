@@ -18,7 +18,6 @@ class IdentityReadinessTest extends TestCase
     {
         config([
             'joinera.mailbox.mode' => null,
-            'joinera.mailbox.provider' => null,
             'joinera.sites.v1' => ['stepstone'],
         ]);
 
@@ -118,9 +117,8 @@ class IdentityReadinessTest extends TestCase
     private function configureReadyEnvironment(): void
     {
         config([
-            'joinera.mailbox.mode' => 'managed_provider',
-            'joinera.mailbox.provider' => 'mailgun_eu',
-            'joinera.mailbox.registrar' => 'fake',
+            'joinera.mailbox.mode' => 'gmx_manual',
+            'joinera.mailbox.driver' => 'fake',
             'joinera.sites.v1' => ['stepstone'],
         ]);
     }
@@ -129,8 +127,10 @@ class IdentityReadinessTest extends TestCase
     {
         return MailboxIdentity::query()->create([
             'user_id' => $user->id,
-            'domain' => 'anna-schmidt.de',
-            'address' => 'anna.schmidt@anna-schmidt.de',
+            'domain' => 'gmx.de',
+            'address' => 'anna.schmidt@gmx.de',
+            'password' => 'gmx-secret',
+            'provider' => 'gmx',
             'state' => MailboxState::Ready,
         ]);
     }

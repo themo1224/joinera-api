@@ -13,7 +13,7 @@ class ResolveIdentityReadiness
      */
     public function handle(User $user): array
     {
-        if ($this->mailboxProviderUnset()) {
+        if ($this->mailboxModeUnset()) {
             return $this->result('needs_staff', 'mailbox_provider_unset');
         }
 
@@ -56,13 +56,11 @@ class ResolveIdentityReadiness
         return $this->result('needs_staff', 'no_healthy_site');
     }
 
-    private function mailboxProviderUnset(): bool
+    private function mailboxModeUnset(): bool
     {
         $mode = config('joinera.mailbox.mode');
-        $provider = config('joinera.mailbox.provider');
 
-        return ! is_string($mode) || $mode === ''
-            || ! is_string($provider) || $provider === '';
+        return ! is_string($mode) || $mode === '';
     }
 
     private function sitesUnconfigured(): bool

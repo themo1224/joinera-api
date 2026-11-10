@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ApplicantController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\IdentityReadinessController;
 use App\Http\Controllers\ListingImportController;
@@ -32,16 +33,9 @@ Route::prefix('v1')->group(function () {
         Route::get('profile/priorities', [ProfilePrioritiesController::class, 'show'])->middleware('user');
         Route::put('profile/priorities', [ProfilePrioritiesController::class, 'update'])->middleware('user');
 
+        // Candidate self-provision is disabled for GMX v1 (Admin attaches credentials).
         Route::post('mailbox', [MailboxController::class, 'store'])->middleware('user');
         Route::get('mailbox', [MailboxController::class, 'show'])->middleware('user');
-        Route::get('mailbox/messages', fn () => response()->json([
-            'code' => 'not_found',
-            'message' => 'Not found.',
-        ], 404))->middleware('user');
-        Route::post('mailbox/messages/{message}/reply', fn () => response()->json([
-            'code' => 'not_found',
-            'message' => 'Not found.',
-        ], 404))->middleware('user');
 
         Route::post('site-identities', [SiteIdentityController::class, 'store'])->middleware('user');
         Route::get('site-identities', [SiteIdentityController::class, 'index'])->middleware('user');
@@ -51,14 +45,20 @@ Route::prefix('v1')->group(function () {
 
         Route::post('listings/import', [ListingImportController::class, 'store'])->middleware('admin');
 
+        Route::get('applicants', [ApplicantController::class, 'index'])->middleware('staff');
+        Route::post('applicants', [ApplicantController::class, 'store'])->middleware('admin');
+        Route::get('applicants/{user}', [ApplicantController::class, 'show'])->middleware('staff');
+        Route::delete('applicants/{user}', [ApplicantController::class, 'destroy'])->middleware('staff');
+
         Route::get('users/{user}/profile', [StaffProfileController::class, 'show'])->middleware('staff');
         Route::post('users/{user}/profile/approvals', [StaffProfileController::class, 'approve'])->middleware('staff');
         Route::get('users/{user}/mailbox', [StaffMailboxController::class, 'show'])->middleware('staff');
+        Route::put('users/{user}/mailbox/credentials', [StaffMailboxController::class, 'updateCredentials'])->middleware('admin');
+        Route::post('users/{user}/mailbox/sync', [StaffMailboxController::class, 'sync'])->middleware('staff');
+        Route::get('users/{user}/mailbox/messages', [StaffMailboxController::class, 'messages'])->middleware('staff');
+        Route::get('users/{user}/mailbox/messages/{message}', [StaffMailboxController::class, 'showMessage'])->middleware('staff');
+        Route::post('users/{user}/mailbox/messages/{message}/reply', [StaffMailboxController::class, 'reply'])->middleware('staff');
         Route::get('users/{user}/site-identities', [StaffSiteIdentityController::class, 'index'])->middleware('staff');
         Route::get('users/{user}/identity/readiness', [StaffIdentityReadinessController::class, 'show'])->middleware('staff');
     });
 });
-
-
-
-

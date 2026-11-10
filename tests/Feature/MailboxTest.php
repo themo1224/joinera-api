@@ -2,323 +2,409 @@
 
 namespace Tests\Feature;
 
-use App\Contracts\DomainRegistrar;
-use App\Contracts\MailboxProvider;
+use App\Enums\MailboxMessageDirection;
 use App\Enums\MailboxState;
+use App\Enums\Role;
+use App\Jobs\SyncGmxMailboxJob;
 use App\Models\MailboxIdentity;
+use App\Models\MailboxMessage;
 use App\Models\User;
-use App\Services\FakeDomainRegistrar;
-use App\Services\FakeMailboxProvider;
-use App\Support\ApplyAddressNormalizer;
+use App\Services\FakeMailboxInboundSync;
+use App\Services\FakeMailboxOutboundMailer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class MailboxTest extends TestCase
 {
     use RefreshDatabase;
 
-    private FakeMailboxProvider $fakeProvider;
+    private FakeMailboxInboundSync $fakeInbound;
 
-    private FakeDomainRegistrar $fakeRegistrar;
+    private FakeMailboxOutboundMailer $fakeOutbound;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->fakeProvider = new FakeMailboxProvider;
-        $this->fakeRegistrar = new FakeDomainRegistrar($this->app->make(ApplyAddressNormalizer::class));
-        $this->app->instance(MailboxProvider::class, $this->fakeProvider);
-        $this->app->instance(DomainRegistrar::class, $this->fakeRegistrar);
-    }
-
-    public function test_post_while_provider_unset_returns_409_and_stores_nothing(): void
-    {
         config([
-            'joinera.mailbox.mode' => null,
-            'joinera.mailbox.provider' => null,
-            'joinera.mailbox.registrar' => null,
+            'joinera.mailbox.mode' => 'gmx_manual',
+            'joinera.mailbox.driver' => 'fake',
+            'joinera.mailbox.allowed_hosts' => ['gmx.de', 'gmx.net'],
         ]);
 
-        $user = User::factory()->create(['name' => 'Anna Schmidt']);
-
-        $this->actingAs($user, 'sanctum')
-            ->postJson('/api/v1/mailbox')
-            ->assertStatus(409)
-            ->assertJsonPath('code', 'mailbox_provider_unset');
-
-        $this->assertDatabaseCount('mailbox_identities', 0);
+        $this->fakeInbound = $this->app->make(FakeMailboxInboundSync::class);
+        $this->fakeOutbound = $this->app->make(FakeMailboxOutboundMailer::class);
     }
 
-    public function test_post_while_registrar_unset_returns_409_and_stores_nothing(): void
+    public function test_candidate_self_post_mailbox_is_rejected(): void
     {
-        config([
-            'joinera.mailbox.mode' => 'managed_provider',
-            'joinera.mailbox.provider' => 'mailgun_eu',
-            'joinera.mailbox.registrar' => null,
-        ]);
-
-        $user = User::factory()->create(['name' => 'Anna Schmidt']);
-
-        $this->actingAs($user, 'sanctum')
-            ->postJson('/api/v1/mailbox')
-            ->assertStatus(409)
-            ->assertJsonPath('code', 'domain_registrar_unset');
-
-        $this->assertDatabaseCount('mailbox_identities', 0);
-    }
-
-    public function test_gmail_or_user_owned_request_is_422_and_stores_nothing(): void
-    {
-        $this->configureMailbox();
-
         $user = User::factory()->create(['name' => 'Anna Schmidt']);
 
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/v1/mailbox', [
-                'mode' => 'gmail',
+                'address' => 'anna@gmx.de',
+                'password' => 'secret',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'mailbox_self_provision_disabled');
+
+        $this->assertDatabaseCount('mailbox_identities', 0);
+    }
+
+    public function test_admin_attach_gmx_credentials_ready_and_hides_password(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $candidate = User::factory()->create(['name' => 'Anna Schmidt']);
+
+        $response = $this->actingAs($admin, 'sanctum')
+            ->putJson('/api/v1/users/'.$candidate->id.'/mailbox/credentials', [
+                'address' => 'anna.schmidt@gmx.de',
+                'password' => 'gmx-secret-pass',
+            ])
+            ->assertOk()
+            ->assertJsonPath('address', 'anna.schmidt@gmx.de')
+            ->assertJsonPath('domain', 'gmx.de')
+            ->assertJsonPath('state', 'ready');
+
+        $payload = $response->json();
+        $this->assertArrayNotHasKey('password', $payload);
+        $this->assertArrayNotHasKey('secret', $payload);
+
+        $mailbox = MailboxIdentity::query()->where('user_id', $candidate->id)->first();
+        $this->assertNotNull($mailbox);
+        $this->assertSame('gmx-secret-pass', $mailbox->password);
+        $this->assertSame(MailboxState::Ready, $mailbox->state);
+    }
+
+    public function test_attach_auth_failure_sets_failed_and_returns_422(): void
+    {
+        $this->fakeInbound->failAuth();
+
+        $admin = User::factory()->admin()->create();
+        $candidate = User::factory()->create(['name' => 'Anna Schmidt']);
+
+        $this->actingAs($admin, 'sanctum')
+            ->putJson('/api/v1/users/'.$candidate->id.'/mailbox/credentials', [
+                'address' => 'anna.schmidt@gmx.de',
+                'password' => 'bad-password',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'gmx_auth_failed')
+            ->assertJsonPath('state', 'failed')
+            ->assertJsonPath('lastSyncError', 'gmx_auth_failed');
+
+        $this->assertDatabaseHas('mailbox_identities', [
+            'user_id' => $candidate->id,
+            'address' => 'anna.schmidt@gmx.de',
+            'state' => MailboxState::Failed->value,
+            'last_sync_error' => 'gmx_auth_failed',
+        ]);
+    }
+
+    public function test_attach_rejects_non_gmx_host(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $candidate = User::factory()->create();
+
+        $this->actingAs($admin, 'sanctum')
+            ->putJson('/api/v1/users/'.$candidate->id.'/mailbox/credentials', [
                 'address' => 'anna@gmail.com',
+                'password' => 'secret',
             ])
             ->assertStatus(422)
-            ->assertJsonPath('code', 'mailbox_mode_rejected');
+            ->assertJsonPath('code', 'invalid_gmx_address');
 
         $this->assertDatabaseCount('mailbox_identities', 0);
     }
 
-    public function test_joinera_shared_domain_request_is_422_and_stores_nothing(): void
+    public function test_attach_rejects_taken_address(): void
     {
-        $this->configureMailbox();
+        $admin = User::factory()->admin()->create();
+        $first = User::factory()->create();
+        $second = User::factory()->create();
 
-        $user = User::factory()->create(['name' => 'Anna Schmidt']);
+        MailboxIdentity::factory()->for($first)->ready()->create([
+            'address' => 'shared@gmx.de',
+            'domain' => 'gmx.de',
+        ]);
 
-        $this->actingAs($user, 'sanctum')
-            ->postJson('/api/v1/mailbox', [
-                'domain' => 'apply.joinera.de',
-                'address' => 'anna.schmidt@apply.joinera.de',
+        $this->actingAs($admin, 'sanctum')
+            ->putJson('/api/v1/users/'.$second->id.'/mailbox/credentials', [
+                'address' => 'shared@gmx.de',
+                'password' => 'secret',
             ])
-            ->assertStatus(422)
-            ->assertJsonPath('code', 'mailbox_mode_rejected');
-
-        $this->assertDatabaseCount('mailbox_identities', 0);
-    }
-
-    public function test_two_users_cannot_store_the_same_address_or_domain(): void
-    {
-        $this->configureMailbox();
-
-        $first = User::factory()->create(['name' => 'Anna Schmidt']);
-        $second = User::factory()->create(['name' => 'Other Person']);
-
-        $this->actingAs($first, 'sanctum')
-            ->postJson('/api/v1/mailbox')
-            ->assertCreated()
-            ->assertJsonPath('domain', 'anna-schmidt.de')
-            ->assertJsonPath('address', 'anna.schmidt@anna-schmidt.de');
-
-        $this->fakeProvider->forceNextAddress('anna.schmidt@anna-schmidt.de');
-        $this->fakeProvider->forceNextDomain('anna-schmidt.de');
-
-        $this->actingAs($second, 'sanctum')
-            ->postJson('/api/v1/mailbox')
             ->assertStatus(409)
             ->assertJsonPath('code', 'mailbox_taken');
-
-        $this->assertSame(1, MailboxIdentity::query()->where('address', 'anna.schmidt@anna-schmidt.de')->count());
-        $this->assertSame(1, MailboxIdentity::query()->where('domain', 'anna-schmidt.de')->count());
     }
 
-    public function test_owner_get_shows_domain_and_address_not_credential_or_message_body(): void
+    public function test_reattach_overwrites_password_and_re_verifies(): void
     {
-        $this->configureMailbox();
-        $this->fakeProvider->autoReady();
+        $admin = User::factory()->admin()->create();
+        $candidate = User::factory()->create();
 
-        $user = User::factory()->create(['name' => 'Anna Schmidt']);
-
-        $this->actingAs($user, 'sanctum')
-            ->postJson('/api/v1/mailbox')
-            ->assertCreated();
-
-        $response = $this->actingAs($user, 'sanctum')
-            ->getJson('/api/v1/mailbox')
+        $this->actingAs($admin, 'sanctum')
+            ->putJson('/api/v1/users/'.$candidate->id.'/mailbox/credentials', [
+                'address' => 'anna@gmx.net',
+                'password' => 'first-pass',
+            ])
             ->assertOk()
-            ->assertJsonPath('domain', 'anna-schmidt.de')
-            ->assertJsonPath('address', 'anna.schmidt@anna-schmidt.de')
+            ->assertJsonPath('domain', 'gmx.net');
+
+        $this->actingAs($admin, 'sanctum')
+            ->putJson('/api/v1/users/'.$candidate->id.'/mailbox/credentials', [
+                'address' => 'anna@gmx.net',
+                'password' => 'second-pass',
+            ])
+            ->assertOk()
             ->assertJsonPath('state', 'ready');
 
-        $payload = $response->json();
-        $this->assertArrayNotHasKey('password', $payload);
-        $this->assertArrayNotHasKey('secret', $payload);
-        $this->assertArrayNotHasKey('messages', $payload);
-        $this->assertArrayNotHasKey('body', $payload);
+        $mailbox = $candidate->fresh()->mailboxIdentity;
+        $this->assertNotNull($mailbox);
+        $this->assertSame('second-pass', $mailbox->password);
+        $this->assertSame(1, MailboxIdentity::query()->where('user_id', $candidate->id)->count());
     }
 
-    public function test_another_users_mailbox_get_is_404(): void
+    public function test_staff_can_attach_is_forbidden_admin_only(): void
     {
-        $this->configureMailbox();
-        $this->fakeProvider->autoReady();
-
-        $owner = User::factory()->create(['name' => 'Anna Schmidt']);
-        $other = User::factory()->create(['name' => 'Bob Example']);
-
-        $this->actingAs($owner, 'sanctum')
-            ->postJson('/api/v1/mailbox')
-            ->assertCreated();
-
-        $this->actingAs($other, 'sanctum')
-            ->getJson('/api/v1/mailbox')
-            ->assertNotFound()
-            ->assertJsonPath('code', 'not_found');
-    }
-
-    public function test_user_mailbox_messages_and_reply_routes_are_404(): void
-    {
-        $user = User::factory()->create(['name' => 'Anna Schmidt']);
-
-        $this->actingAs($user, 'sanctum')
-            ->getJson('/api/v1/mailbox/messages')
-            ->assertNotFound();
-
-        $this->actingAs($user, 'sanctum')
-            ->postJson('/api/v1/mailbox/messages/1/reply', ['body' => 'hi'])
-            ->assertNotFound();
-    }
-
-    public function test_staff_metadata_get_has_no_secret_and_no_message_body(): void
-    {
-        $this->configureMailbox();
-        $this->fakeProvider->autoReady();
-
-        $user = User::factory()->create(['name' => 'Anna Schmidt']);
         $staff = User::factory()->staff()->create();
+        $candidate = User::factory()->create();
 
-        $this->actingAs($user, 'sanctum')
-            ->postJson('/api/v1/mailbox')
-            ->assertCreated();
+        $this->actingAs($staff, 'sanctum')
+            ->putJson('/api/v1/users/'.$candidate->id.'/mailbox/credentials', [
+                'address' => 'anna@gmx.de',
+                'password' => 'secret',
+            ])
+            ->assertForbidden();
+    }
+
+    public function test_staff_mailbox_show_has_sync_fields_without_password(): void
+    {
+        $staff = User::factory()->staff()->create();
+        $candidate = User::factory()->create();
+        MailboxIdentity::factory()->for($candidate)->ready()->create([
+            'address' => 'cara@gmx.de',
+            'domain' => 'gmx.de',
+            'last_synced_at' => now(),
+            'last_sync_error' => null,
+        ]);
 
         $response = $this->actingAs($staff, 'sanctum')
-            ->getJson('/api/v1/users/'.$user->id.'/mailbox')
+            ->getJson('/api/v1/users/'.$candidate->id.'/mailbox')
             ->assertOk()
-            ->assertJsonPath('domain', 'anna-schmidt.de')
-            ->assertJsonPath('address', 'anna.schmidt@anna-schmidt.de')
+            ->assertJsonPath('address', 'cara@gmx.de')
+            ->assertJsonPath('domain', 'gmx.de')
             ->assertJsonPath('state', 'ready');
 
         $payload = $response->json();
         $this->assertArrayNotHasKey('password', $payload);
-        $this->assertArrayNotHasKey('secret', $payload);
-        $this->assertArrayNotHasKey('messages', $payload);
-        $this->assertArrayNotHasKey('body', $payload);
-        $this->assertSame(['domain', 'address', 'state'], array_keys($payload));
+        $this->assertArrayHasKey('lastSyncedAt', $payload);
+        $this->assertArrayHasKey('lastSyncError', $payload);
     }
 
-    public function test_umlaut_name_yields_personal_domain_address(): void
+    public function test_staff_lists_and_replies_to_messages(): void
     {
-        $this->configureMailbox();
+        $staff = User::factory()->staff()->create();
+        $candidate = User::factory()->create();
+        $mailbox = MailboxIdentity::factory()->for($candidate)->ready()->create([
+            'address' => 'anna@gmx.de',
+            'domain' => 'gmx.de',
+        ]);
 
-        $user = User::factory()->create(['name' => 'Jörg Müller-Weiß']);
+        $inbound = MailboxMessage::query()->create([
+            'mailbox_identity_id' => $mailbox->id,
+            'provider_message_id' => '<inbound-1@employer.test>',
+            'direction' => MailboxMessageDirection::Inbound,
+            'from_address' => 'hr@employer.test',
+            'to_address' => 'anna@gmx.de',
+            'subject' => 'Interview',
+            'body_text' => 'Can you interview next week?',
+            'received_at' => now(),
+        ]);
 
-        $this->actingAs($user, 'sanctum')
-            ->postJson('/api/v1/mailbox')
+        $this->actingAs($staff, 'sanctum')
+            ->getJson('/api/v1/users/'.$candidate->id.'/mailbox/messages')
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('messages.0.id', $inbound->id)
+            ->assertJsonPath('messages.0.subject', 'Interview');
+
+        $this->actingAs($staff, 'sanctum')
+            ->postJson('/api/v1/users/'.$candidate->id.'/mailbox/messages/'.$inbound->id.'/reply', [
+                'body' => 'Yes, Tuesday works.',
+            ])
             ->assertCreated()
-            ->assertJsonPath('domain', 'joerg-mueller-weiss.de')
-            ->assertJsonPath('address', 'joerg.mueller-weiss@joerg-mueller-weiss.de')
-            ->assertJsonPath('state', 'pending');
+            ->assertJsonPath('direction', 'outbound')
+            ->assertJsonPath('bodyText', 'Yes, Tuesday works.')
+            ->assertJsonPath('inReplyToMessageId', $inbound->id);
+
+        $this->assertCount(1, $this->fakeOutbound->sent());
+        $this->assertDatabaseHas('mailbox_messages', [
+            'mailbox_identity_id' => $mailbox->id,
+            'direction' => MailboxMessageDirection::Outbound->value,
+            'body_text' => 'Yes, Tuesday works.',
+            'in_reply_to_message_id' => $inbound->id,
+        ]);
     }
 
-    public function test_second_anna_schmidt_gets_alternate_domain(): void
+    public function test_candidate_cannot_list_or_reply_staff_message_routes(): void
     {
-        $this->configureMailbox();
+        $candidate = User::factory()->create();
+        $mailbox = MailboxIdentity::factory()->for($candidate)->ready()->create([
+            'address' => 'anna@gmx.de',
+            'domain' => 'gmx.de',
+        ]);
+        $inbound = MailboxMessage::query()->create([
+            'mailbox_identity_id' => $mailbox->id,
+            'provider_message_id' => '<inbound-2@employer.test>',
+            'direction' => MailboxMessageDirection::Inbound,
+            'from_address' => 'hr@employer.test',
+            'to_address' => 'anna@gmx.de',
+            'subject' => 'Hello',
+            'body_text' => 'Hi',
+            'received_at' => now(),
+        ]);
 
-        $first = User::factory()->create(['name' => 'Anna Schmidt']);
-        $second = User::factory()->create(['name' => 'Anna Schmidt']);
+        $this->actingAs($candidate, 'sanctum')
+            ->getJson('/api/v1/users/'.$candidate->id.'/mailbox/messages')
+            ->assertForbidden();
 
-        $this->actingAs($first, 'sanctum')
-            ->postJson('/api/v1/mailbox')
-            ->assertCreated()
-            ->assertJsonPath('domain', 'anna-schmidt.de')
-            ->assertJsonPath('address', 'anna.schmidt@anna-schmidt.de');
-
-        $this->actingAs($second, 'sanctum')
-            ->postJson('/api/v1/mailbox')
-            ->assertCreated()
-            ->assertJsonPath('domain', 'anna-schmidt2.de')
-            ->assertJsonPath('address', 'anna.schmidt@anna-schmidt2.de');
+        $this->actingAs($candidate, 'sanctum')
+            ->postJson('/api/v1/users/'.$candidate->id.'/mailbox/messages/'.$inbound->id.'/reply', [
+                'body' => 'nope',
+            ])
+            ->assertForbidden();
     }
 
-    public function test_preferred_domain_taken_tries_alternate(): void
+    public function test_sync_job_upserts_inbound_idempotently_and_auth_fail_marks_failed(): void
     {
-        $this->configureMailbox();
-        $this->fakeRegistrar->forceTaken('anna-schmidt.de');
+        $candidate = User::factory()->create();
+        $mailbox = MailboxIdentity::factory()->for($candidate)->ready()->create([
+            'address' => 'anna@gmx.de',
+            'domain' => 'gmx.de',
+            'password' => 'ok',
+        ]);
 
-        $user = User::factory()->create(['name' => 'Anna Schmidt']);
+        $payload = [
+            'provider_message_id' => '<dup@employer.test>',
+            'from_address' => 'hr@employer.test',
+            'to_address' => 'anna@gmx.de',
+            'subject' => 'Offer',
+            'body_text' => 'Congrats',
+        ];
 
-        $this->actingAs($user, 'sanctum')
-            ->postJson('/api/v1/mailbox')
-            ->assertCreated()
-            ->assertJsonPath('domain', 'anna-schmidt2.de')
-            ->assertJsonPath('address', 'anna.schmidt@anna-schmidt2.de');
+        $this->fakeInbound->queueInbound('anna@gmx.de', $payload);
+        (new SyncGmxMailboxJob($mailbox->id))->handle($this->fakeInbound);
+        $this->assertSame(1, MailboxMessage::query()->where('mailbox_identity_id', $mailbox->id)->count());
+
+        $this->fakeInbound->queueInbound('anna@gmx.de', $payload);
+        (new SyncGmxMailboxJob($mailbox->id))->handle($this->fakeInbound);
+        $this->assertSame(1, MailboxMessage::query()->where('mailbox_identity_id', $mailbox->id)->count());
+
+        $this->fakeInbound->failAuth();
+        (new SyncGmxMailboxJob($mailbox->id))->handle($this->fakeInbound);
+
+        $mailbox->refresh();
+        $this->assertSame(MailboxState::Failed, $mailbox->state);
+        $this->assertSame('gmx_auth_failed', $mailbox->last_sync_error);
     }
 
-    public function test_exhausted_domain_candidates_end_in_failed_without_joinera_subdomain(): void
+    public function test_two_candidates_may_share_gmx_de_domain_but_not_address(): void
     {
-        $this->configureMailbox();
-        $this->fakeRegistrar->exhaustAll();
+        $admin = User::factory()->admin()->create();
+        $first = User::factory()->create();
+        $second = User::factory()->create();
 
-        $user = User::factory()->create(['name' => 'Anna Schmidt']);
+        $this->actingAs($admin, 'sanctum')
+            ->putJson('/api/v1/users/'.$first->id.'/mailbox/credentials', [
+                'address' => 'one@gmx.de',
+                'password' => 'secret1',
+            ])
+            ->assertOk();
 
-        $response = $this->actingAs($user, 'sanctum')
-            ->postJson('/api/v1/mailbox')
-            ->assertCreated()
-            ->assertJsonPath('state', 'failed')
-            ->assertJsonPath('domain', 'anna-schmidt.de')
-            ->assertJsonPath('address', 'anna.schmidt@anna-schmidt.de');
+        $this->actingAs($admin, 'sanctum')
+            ->putJson('/api/v1/users/'.$second->id.'/mailbox/credentials', [
+                'address' => 'two@gmx.de',
+                'password' => 'secret2',
+            ])
+            ->assertOk()
+            ->assertJsonPath('domain', 'gmx.de');
 
-        $this->assertStringNotContainsString('joinera', (string) $response->json('domain'));
-        $this->assertStringNotContainsString('joinera', (string) $response->json('address'));
+        $this->assertSame(2, MailboxIdentity::query()->where('domain', 'gmx.de')->count());
+        $this->assertSame(Role::User, $first->fresh()->role);
     }
 
-    public function test_missing_last_name_returns_422_name_required(): void
+    public function test_sync_all_job_dispatches_per_ready_mailbox(): void
     {
-        $this->configureMailbox();
+        Queue::fake();
 
-        $user = User::factory()->create(['name' => 'Madonna']);
+        $ready = MailboxIdentity::factory()->ready()->create([
+            'address' => 'ready@gmx.de',
+            'domain' => 'gmx.de',
+        ]);
+        MailboxIdentity::factory()->pending()->create([
+            'address' => 'pending@gmx.de',
+            'domain' => 'gmx.de',
+        ]);
 
-        $this->actingAs($user, 'sanctum')
-            ->postJson('/api/v1/mailbox')
-            ->assertStatus(422)
-            ->assertJsonPath('code', 'name_required');
+        (new \App\Jobs\SyncAllReadyGmxMailboxesJob)->handle();
 
-        $this->assertDatabaseCount('mailbox_identities', 0);
+        Queue::assertPushed(SyncGmxMailboxJob::class, function (SyncGmxMailboxJob $job) use ($ready): bool {
+            return $job->mailboxIdentityId === $ready->id;
+        });
     }
 
-    public function test_port_fake_can_move_pending_to_ready(): void
+    public function test_staff_sync_now_upserts_and_returns_count(): void
     {
-        $this->configureMailbox();
+        $staff = User::factory()->staff()->create();
+        $candidate = User::factory()->create();
+        MailboxIdentity::factory()->for($candidate)->ready()->create([
+            'address' => 'anna@gmx.de',
+            'domain' => 'gmx.de',
+            'password' => 'ok',
+            'last_sync_error' => 'gmx_sync_failed',
+        ]);
 
-        $user = User::factory()->create(['name' => 'Anna Schmidt']);
+        $this->fakeInbound->queueInbound('anna@gmx.de', [
+            'provider_message_id' => '<sync-now@employer.test>',
+            'from_address' => 'hr@employer.test',
+            'to_address' => 'anna@gmx.de',
+            'subject' => 'Synced',
+            'body_text' => 'Hello from sync now',
+        ]);
 
-        $this->actingAs($user, 'sanctum')
-            ->postJson('/api/v1/mailbox')
-            ->assertCreated()
-            ->assertJsonPath('state', 'pending');
-
-        $mailbox = $user->fresh()->mailboxIdentity;
-        $this->assertNotNull($mailbox);
-        $this->assertSame(MailboxState::Pending, $mailbox->state);
-
-        $this->fakeProvider->markReady($mailbox);
-
-        $this->actingAs($user, 'sanctum')
-            ->getJson('/api/v1/mailbox')
+        $this->actingAs($staff, 'sanctum')
+            ->postJson('/api/v1/users/'.$candidate->id.'/mailbox/sync')
             ->assertOk()
             ->assertJsonPath('state', 'ready')
-            ->assertJsonPath('domain', 'anna-schmidt.de');
+            ->assertJsonPath('upserted', 1)
+            ->assertJsonPath('lastSyncError', null);
+
+        $this->assertDatabaseHas('mailbox_messages', [
+            'provider_message_id' => '<sync-now@employer.test>',
+            'subject' => 'Synced',
+        ]);
     }
 
-    private function configureMailbox(): void
+    public function test_attach_dispatches_sync_job_when_ready(): void
     {
-        config([
-            'joinera.mailbox.mode' => 'managed_provider',
-            'joinera.mailbox.provider' => 'mailgun_eu',
-            'joinera.mailbox.registrar' => 'fake',
-        ]);
+        Queue::fake();
+
+        $admin = User::factory()->admin()->create();
+        $candidate = User::factory()->create();
+
+        $this->actingAs($admin, 'sanctum')
+            ->putJson('/api/v1/users/'.$candidate->id.'/mailbox/credentials', [
+                'address' => 'anna@gmx.de',
+                'password' => 'secret',
+            ])
+            ->assertOk();
+
+        $mailbox = MailboxIdentity::query()->where('user_id', $candidate->id)->first();
+        $this->assertNotNull($mailbox);
+
+        Queue::assertPushed(SyncGmxMailboxJob::class, function (SyncGmxMailboxJob $job) use ($mailbox): bool {
+            return $job->mailboxIdentityId === $mailbox->id;
+        });
     }
 }

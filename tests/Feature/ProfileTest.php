@@ -374,4 +374,126 @@ class ProfileTest extends TestCase
             ->assertOk()
             ->assertJsonPath('hasCv', true);
     }
+
+    public function test_staff_can_update_candidate_profile_fields(): void
+    {
+        $candidate = User::factory()->create();
+        $staff = User::factory()->staff()->create();
+
+        $this->actingAs($staff, 'sanctum')
+            ->putJson('/api/v1/users/'.$candidate->id.'/profile', [
+                'industry' => 'IT',
+                'city' => 'Berlin',
+                'province' => 'BE',
+                'language' => 'de',
+            ])
+            ->assertOk()
+            ->assertExactJson([
+                'industry' => 'IT',
+                'city' => 'Berlin',
+                'province' => 'BE',
+                'language' => 'de',
+                'complete' => false,
+                'parse_status' => 'unparsed',
+                'approval' => 'pending',
+            ])
+            ->assertJsonMissingPath('cv')
+            ->assertJsonMissingPath('path')
+            ->assertJsonMissingPath('disk')
+            ->assertJsonMissingPath('password');
+
+        $this->actingAs($staff, 'sanctum')
+            ->getJson('/api/v1/users/'.$candidate->id.'/profile')
+            ->assertOk()
+            ->assertJsonPath('industry', 'IT')
+            ->assertJsonPath('city', 'Berlin')
+            ->assertJsonPath('province', 'BE')
+            ->assertJsonPath('language', 'de');
+
+        $this->actingAs($staff, 'sanctum')
+            ->getJson('/api/v1/applicants/'.$candidate->id)
+            ->assertOk()
+            ->assertJsonPath('industry', 'IT')
+            ->assertJsonPath('city', 'Berlin')
+            ->assertJsonPath('province', 'BE')
+            ->assertJsonPath('language', 'de');
+    }
+
+    public function test_admin_can_update_candidate_profile_fields(): void
+    {
+        $candidate = User::factory()->create();
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin, 'sanctum')
+            ->putJson('/api/v1/users/'.$candidate->id.'/profile', [
+                'city' => 'Munich',
+            ])
+            ->assertOk()
+            ->assertJsonPath('city', 'Munich')
+            ->assertJsonMissingPath('password');
+
+        $this->actingAs($admin, 'sanctum')
+            ->getJson('/api/v1/applicants/'.$candidate->id)
+            ->assertOk()
+            ->assertJsonPath('city', 'Munich');
+    }
+
+    public function test_staff_cannot_update_profile_for_staff_or_admin_target(): void
+    {
+        $staffActor = User::factory()->staff()->create();
+        $staffTarget = User::factory()->staff()->create();
+        $adminTarget = User::factory()->admin()->create();
+
+        $this->actingAs($staffActor, 'sanctum')
+            ->putJson('/api/v1/users/'.$staffTarget->id.'/profile', [
+                'city' => 'Berlin',
+            ])
+            ->assertNotFound()
+            ->assertJsonPath('code', 'not_found');
+
+        $this->actingAs($staffActor, 'sanctum')
+            ->putJson('/api/v1/users/'.$adminTarget->id.'/profile', [
+                'city' => 'Berlin',
+            ])
+            ->assertNotFound()
+            ->assertJsonPath('code', 'not_found');
+    }
+
+    public function test_staff_empty_language_on_candidate_profile_is_422_and_old_value_remains(): void
+    {
+        $candidate = User::factory()->create();
+        $staff = User::factory()->staff()->create();
+
+        $this->actingAs($staff, 'sanctum')
+            ->putJson('/api/v1/users/'.$candidate->id.'/profile', [
+                'industry' => 'IT',
+                'city' => 'Berlin',
+                'province' => 'BE',
+                'language' => 'de',
+            ])
+            ->assertOk();
+
+        $this->actingAs($staff, 'sanctum')
+            ->putJson('/api/v1/users/'.$candidate->id.'/profile', ['language' => ''])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'validation_failed');
+
+        $this->actingAs($staff, 'sanctum')
+            ->getJson('/api/v1/users/'.$candidate->id.'/profile')
+            ->assertOk()
+            ->assertJsonPath('language', 'de');
+    }
+
+    public function test_candidate_cannot_update_profile_via_staff_route(): void
+    {
+        $owner = User::factory()->create();
+        $intruder = User::factory()->create();
+
+        $this->actingAs($intruder, 'sanctum')
+            ->putJson('/api/v1/users/'.$owner->id.'/profile', [
+                'city' => 'Berlin',
+            ])
+            ->assertForbidden()
+            ->assertJsonPath('code', 'forbidden');
+    }
 }

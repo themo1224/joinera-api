@@ -12,6 +12,7 @@ use App\Http\Controllers\ProfilePrioritiesController;
 use App\Http\Controllers\SiteIdentityController;
 use App\Http\Controllers\StaffIdentityReadinessController;
 use App\Http\Controllers\StaffMailboxController;
+use App\Http\Controllers\StaffPrioritiesController;
 use App\Http\Controllers\StaffProfileController;
 use App\Http\Controllers\StaffSiteIdentityController;
 use App\Http\Controllers\StaffUserController;
@@ -51,6 +52,9 @@ Route::prefix('v1')->group(function () {
         Route::delete('applicants/{user}', [ApplicantController::class, 'destroy'])->middleware('staff');
 
         Route::get('users/{user}/profile', [StaffProfileController::class, 'show'])->middleware('staff');
+        Route::put('users/{user}/profile', [StaffProfileController::class, 'update'])->middleware('staff');
+        Route::get('users/{user}/profile/priorities', [StaffPrioritiesController::class, 'show'])->middleware('staff');
+        Route::put('users/{user}/profile/priorities', [StaffPrioritiesController::class, 'update'])->middleware('staff');
         Route::post('users/{user}/profile/cv', [StaffProfileController::class, 'storeCv'])->middleware('staff');
         Route::post('users/{user}/profile/approvals', [StaffProfileController::class, 'approve'])->middleware('staff');
         Route::get('users/{user}/mailbox', [StaffMailboxController::class, 'show'])->middleware('staff');

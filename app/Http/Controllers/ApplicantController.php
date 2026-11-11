@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class ApplicantController extends Controller
 {
@@ -65,10 +66,15 @@ class ApplicantController extends Controller
     public function store(StoreApplicantRequest $request): JsonResponse
     {
         $applicant = DB::transaction(function () use ($request): User {
+            $email = $request->filled('email')
+                ? $request->string('email')->toString()
+                : null;
+
+            // User row still needs a hash; Candidate has no login — never return this value.
             $user = User::query()->create([
                 'name' => $request->string('name')->toString(),
-                'email' => $request->string('email')->toString(),
-                'password' => $request->string('password')->toString(),
+                'email' => $email,
+                'password' => Str::password(64),
                 'role' => Role::User,
             ]);
 

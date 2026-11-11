@@ -231,4 +231,147 @@ class ProfileTest extends TestCase
             ->assertForbidden()
             ->assertJsonPath('code', 'forbidden');
     }
+
+    public function test_staff_can_upload_cv_for_candidate_and_applicant_shows_has_cv(): void
+    {
+        Storage::fake(CvStorage::DISK);
+        $candidate = User::factory()->create();
+        $staff = User::factory()->staff()->create();
+
+        $this->actingAs($staff, 'sanctum')
+            ->post('/api/v1/users/'.$candidate->id.'/profile/cv', [
+                'cv' => UploadedFile::fake()->create('cv.pdf', 100, 'application/pdf'),
+            ])
+            ->assertCreated()
+            ->assertExactJson([
+                'industry' => null,
+                'city' => null,
+                'province' => null,
+                'language' => null,
+                'complete' => false,
+                'parse_status' => 'unparsed',
+                'approval' => 'pending',
+            ])
+            ->assertJsonMissingPath('cv')
+            ->assertJsonMissingPath('path')
+            ->assertJsonMissingPath('disk');
+
+        $this->assertDatabaseCount('cv_assets', 1);
+        $this->assertDatabaseHas('cv_assets', ['user_id' => $candidate->id]);
+
+        $this->actingAs($staff, 'sanctum')
+            ->getJson('/api/v1/applicants/'.$candidate->id)
+            ->assertOk()
+            ->assertJsonPath('hasCv', true)
+            ->assertJsonPath('profileComplete', false);
+    }
+
+    public function test_admin_can_upload_cv_for_candidate(): void
+    {
+        Storage::fake(CvStorage::DISK);
+        $candidate = User::factory()->create();
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin, 'sanctum')
+            ->post('/api/v1/users/'.$candidate->id.'/profile/cv', [
+                'cv' => UploadedFile::fake()->create('resume.pdf', 120, 'application/pdf'),
+            ])
+            ->assertCreated()
+            ->assertJsonPath('complete', false);
+
+        $this->actingAs($admin, 'sanctum')
+            ->getJson('/api/v1/applicants/'.$candidate->id)
+            ->assertOk()
+            ->assertJsonPath('hasCv', true);
+    }
+
+    public function test_candidate_cannot_upload_cv_via_staff_route(): void
+    {
+        Storage::fake(CvStorage::DISK);
+        $owner = User::factory()->create();
+        $intruder = User::factory()->create();
+
+        $this->actingAs($intruder, 'sanctum')
+            ->post('/api/v1/users/'.$owner->id.'/profile/cv', [
+                'cv' => UploadedFile::fake()->create('cv.pdf', 100, 'application/pdf'),
+            ])
+            ->assertForbidden()
+            ->assertJsonPath('code', 'forbidden');
+
+        $this->assertDatabaseCount('cv_assets', 0);
+    }
+
+    public function test_staff_cannot_upload_cv_for_staff_or_admin_target(): void
+    {
+        Storage::fake(CvStorage::DISK);
+        $staffActor = User::factory()->staff()->create();
+        $staffTarget = User::factory()->staff()->create();
+        $adminTarget = User::factory()->admin()->create();
+
+        $this->actingAs($staffActor, 'sanctum')
+            ->post('/api/v1/users/'.$staffTarget->id.'/profile/cv', [
+                'cv' => UploadedFile::fake()->create('cv.pdf', 100, 'application/pdf'),
+            ])
+            ->assertNotFound()
+            ->assertJsonPath('code', 'not_found');
+
+        $this->actingAs($staffActor, 'sanctum')
+            ->post('/api/v1/users/'.$adminTarget->id.'/profile/cv', [
+                'cv' => UploadedFile::fake()->create('cv.pdf', 100, 'application/pdf'),
+            ])
+            ->assertNotFound()
+            ->assertJsonPath('code', 'not_found');
+
+        $this->assertDatabaseCount('cv_assets', 0);
+    }
+
+    public function test_staff_non_pdf_upload_for_candidate_is_422(): void
+    {
+        Storage::fake(CvStorage::DISK);
+        $candidate = User::factory()->create();
+        $staff = User::factory()->staff()->create();
+
+        $this->actingAs($staff, 'sanctum')
+            ->post('/api/v1/users/'.$candidate->id.'/profile/cv', [
+                'cv' => UploadedFile::fake()->create('notes.txt', 20, 'text/plain'),
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'validation_failed');
+
+        $this->assertDatabaseCount('cv_assets', 0);
+    }
+
+    public function test_staff_second_pdf_replaces_candidate_cv_asset(): void
+    {
+        Storage::fake(CvStorage::DISK);
+        $candidate = User::factory()->create();
+        $staff = User::factory()->staff()->create();
+
+        $this->actingAs($staff, 'sanctum')
+            ->post('/api/v1/users/'.$candidate->id.'/profile/cv', [
+                'cv' => UploadedFile::fake()->create('first.pdf', 100, 'application/pdf'),
+            ])
+            ->assertCreated();
+
+        $first = CvAsset::query()->where('user_id', $candidate->id)->firstOrFail();
+        Storage::disk(CvStorage::DISK)->assertExists($first->path);
+
+        $this->actingAs($staff, 'sanctum')
+            ->post('/api/v1/users/'.$candidate->id.'/profile/cv', [
+                'cv' => UploadedFile::fake()->create('second.pdf', 150, 'application/pdf'),
+            ])
+            ->assertCreated();
+
+        $this->assertDatabaseCount('cv_assets', 1);
+
+        $second = CvAsset::query()->where('user_id', $candidate->id)->firstOrFail();
+        $this->assertNotSame($first->path, $second->path);
+        Storage::disk(CvStorage::DISK)->assertMissing($first->path);
+        Storage::disk(CvStorage::DISK)->assertExists($second->path);
+
+        $this->actingAs($staff, 'sanctum')
+            ->getJson('/api/v1/applicants/'.$candidate->id)
+            ->assertOk()
+            ->assertJsonPath('hasCv', true);
+    }
 }

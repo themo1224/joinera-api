@@ -62,7 +62,6 @@ class ApplicantTest extends TestCase
             ->postJson('/api/v1/applicants', [
                 'name' => 'Mahdi Mahboobi',
                 'email' => 'mahdi.personal@gmail.com',
-                'password' => 'password123',
             ])
             ->assertCreated()
             ->assertJsonPath('name', 'Mahdi Mahboobi')
@@ -70,7 +69,8 @@ class ApplicantTest extends TestCase
             ->assertJsonPath('approval', 'pending')
             ->assertJsonPath('mailboxState', 'pending')
             ->assertJsonPath('mailboxDomain', null)
-            ->assertJsonPath('mailboxAddress', null);
+            ->assertJsonPath('mailboxAddress', null)
+            ->assertJsonMissingPath('password');
 
         $id = $response->json('id');
         $this->assertIsInt($id);
@@ -79,7 +79,46 @@ class ApplicantTest extends TestCase
             'email' => 'mahdi.personal@gmail.com',
             'role' => Role::User->value,
         ]);
+        $created = User::query()->findOrFail($id);
+        $this->assertNotSame('', (string) $created->password);
         $this->assertDatabaseCount('mailbox_identities', 0);
+    }
+
+    public function test_admin_creates_applicant_with_name_only(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        $response = $this->actingAs($admin, 'sanctum')
+            ->postJson('/api/v1/applicants', [
+                'name' => 'No Contact Yet',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('name', 'No Contact Yet')
+            ->assertJsonPath('email', null)
+            ->assertJsonPath('mailboxState', 'pending')
+            ->assertJsonMissingPath('password');
+
+        $id = $response->json('id');
+        $this->assertDatabaseHas('users', [
+            'id' => $id,
+            'email' => null,
+            'role' => Role::User->value,
+        ]);
+    }
+
+    public function test_create_rejects_admin_supplied_password(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin, 'sanctum')
+            ->postJson('/api/v1/applicants', [
+                'name' => 'Should Fail',
+                'email' => 'should.fail@example.test',
+                'password' => 'password123',
+            ])
+            ->assertStatus(422);
+
+        $this->assertDatabaseMissing('users', ['email' => 'should.fail@example.test']);
     }
 
     public function test_staff_cannot_create_applicant(): void
@@ -90,7 +129,6 @@ class ApplicantTest extends TestCase
             ->postJson('/api/v1/applicants', [
                 'name' => 'Mahdi Mahboobi',
                 'email' => 'mahdi.personal@gmail.com',
-                'password' => 'password123',
             ])
             ->assertForbidden()
             ->assertJsonPath('code', 'forbidden');
@@ -106,7 +144,6 @@ class ApplicantTest extends TestCase
             ->postJson('/api/v1/applicants', [
                 'name' => 'Mahboobi',
                 'email' => 'customer@gmail.com',
-                'password' => 'password123',
             ])
             ->assertCreated()
             ->assertJsonPath('name', 'Mahboobi')
@@ -122,7 +159,6 @@ class ApplicantTest extends TestCase
             ->postJson('/api/v1/applicants', [
                 'name' => 'Mahdi Mahboobi',
                 'email' => 'mahdi.personal@gmail.com',
-                'password' => 'password123',
             ])
             ->assertCreated()
             ->json('id');

@@ -51,6 +51,7 @@ Route::prefix('v1')->group(function () {
         Route::delete('applicants/{user}', [ApplicantController::class, 'destroy'])->middleware('staff');
 
         Route::get('users/{user}/profile', [StaffProfileController::class, 'show'])->middleware('staff');
+        Route::post('users/{user}/profile/cv', [StaffProfileController::class, 'storeCv'])->middleware('staff');
         Route::post('users/{user}/profile/approvals', [StaffProfileController::class, 'approve'])->middleware('staff');
         Route::get('users/{user}/mailbox', [StaffMailboxController::class, 'show'])->middleware('staff');
         Route::put('users/{user}/mailbox/credentials', [StaffMailboxController::class, 'updateCredentials'])->middleware('admin');

@@ -17,7 +17,7 @@ class BuildApplicantDirectoryItem
      * @return array{
      *     id: int,
      *     name: string,
-     *     email: string,
+     *     email: string|null,
      *     industry: string,
      *     city: string,
      *     province: string,

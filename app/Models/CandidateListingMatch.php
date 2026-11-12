@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'user_id',
@@ -49,6 +50,14 @@ class CandidateListingMatch extends Model
     public function forceQueuedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'force_queued_by');
+    }
+
+    /**
+     * @return HasOne<Application, $this>
+     */
+    public function application(): HasOne
+    {
+        return $this->hasOne(Application::class);
     }
 
     /**

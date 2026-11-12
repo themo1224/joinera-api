@@ -42,6 +42,14 @@ class Listing extends Model
     }
 
     /**
+     * @return HasMany<Application, $this>
+     */
+    public function applications(): HasMany
+    {
+        return $this->hasMany(Application::class);
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array

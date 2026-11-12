@@ -18,6 +18,12 @@ use Illuminate\Database\Eloquent\Model;
     'company',
     'city',
     'url',
+    'apply_url',
+    'description',
+    'language_requirement',
+    'education_requirement',
+    'country',
+    'posted_at',
     'first_seen_at',
     'last_seen_at',
 ])]
@@ -33,6 +39,7 @@ class Listing extends Model
     {
         return [
             'kind' => ListingKind::class,
+            'posted_at' => 'datetime',
             'first_seen_at' => 'datetime',
             'last_seen_at' => 'datetime',
         ];

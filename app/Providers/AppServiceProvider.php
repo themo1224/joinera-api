@@ -2,11 +2,13 @@
 
 namespace App\Providers;
 
+use App\Contracts\AusbildungDeHttpClient;
 use App\Contracts\CvParser;
 use App\Contracts\DomainRegistrar;
 use App\Contracts\MailboxInboundSync;
 use App\Contracts\MailboxOutboundMailer;
 use App\Contracts\MailboxProvider;
+use App\Services\AusbildungDe\LaravelAusbildungDeHttpClient;
 use App\Services\FakeMailboxInboundSync;
 use App\Services\FakeMailboxOutboundMailer;
 use App\Services\FixtureCvParser;
@@ -53,6 +55,9 @@ class AppServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton(SiteIntakeAdapterRegistry::class);
+
+        // Ausbildung.de HTTP only — adapter is not registered in sites.v1 yet.
+        $this->app->bind(AusbildungDeHttpClient::class, LaravelAusbildungDeHttpClient::class);
     }
 
     /**

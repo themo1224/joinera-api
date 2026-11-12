@@ -28,6 +28,12 @@ return [
         // Empty until Q12; tests set fixture ids via config().
         'v1' => [],
         'allow_non_de' => (bool) env('JOINERA_SITES_ALLOW_NON_DE', false),
+        'adapters' => [
+            'ausbildung_de' => [
+                'search_url' => env('JOINERA_AUSBILDUNG_DE_SEARCH_URL', 'https://www.ausbildung.de/suche/'),
+                'base_url' => env('JOINERA_AUSBILDUNG_DE_BASE_URL', 'https://www.ausbildung.de'),
+            ],
+        ],
     ],
     'queues' => [
         'intake' => 'intake',

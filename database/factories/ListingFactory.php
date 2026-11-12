@@ -32,6 +32,12 @@ class ListingFactory extends Factory
             'company' => fake()->company(),
             'city' => fake()->randomElement(['Berlin', 'Hamburg', 'Munich', 'Cologne']),
             'url' => 'https://jobs.joinera.test/'.$externalId,
+            'apply_url' => null,
+            'description' => null,
+            'language_requirement' => null,
+            'education_requirement' => null,
+            'country' => 'DE',
+            'posted_at' => null,
             'first_seen_at' => now()->subDays(3),
             'last_seen_at' => now()->subDay(),
         ];

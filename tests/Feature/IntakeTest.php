@@ -35,6 +35,55 @@ class IntakeTest extends TestCase
         $this->assertSame(1, Listing::query()->where('kind', ListingKind::Job)->count());
         $this->assertSame(1, Listing::query()->where('kind', ListingKind::Ausbildung)->count());
         Event::assertDispatchedTimes(ListingCreated::class, 2);
+
+        $job = Listing::query()->where('external_id', 'job-1')->first();
+        $this->assertNotNull($job);
+        $this->assertSame('https://example.test/jobs/1/apply', $job->apply_url);
+        $this->assertSame('Build software in Berlin.', $job->description);
+        $this->assertSame('B1 German', $job->language_requirement);
+        $this->assertSame('Bachelor', $job->education_requirement);
+        $this->assertSame('DE', $job->country);
+        $this->assertNotNull($job->posted_at);
+        $this->assertTrue($job->posted_at->equalTo('2026-11-01T10:00:00+00:00'));
+
+        $ausbildung = Listing::query()->where('external_id', 'ausbildung-1')->first();
+        $this->assertNotNull($ausbildung);
+        $this->assertNull($ausbildung->apply_url);
+        $this->assertNull($ausbildung->description);
+        $this->assertNull($ausbildung->language_requirement);
+        $this->assertNull($ausbildung->education_requirement);
+        $this->assertSame('DE', $ausbildung->country);
+        $this->assertNull($ausbildung->posted_at);
+    }
+
+    public function test_upsert_listing_persists_prd_fields_on_create(): void
+    {
+        $result = $this->app->make(UpsertListing::class)->handle('fixture_a', [
+            'external_id' => 'prd-1',
+            'kind' => 'job',
+            'title' => 'Nurse',
+            'company' => 'Klinik',
+            'city' => 'Hamburg',
+            'url' => 'https://example.test/prd-1',
+            'apply_url' => 'https://example.test/prd-1/apply',
+            'description' => 'Ward nurse role.',
+            'language_requirement' => 'B2 German',
+            'education_requirement' => 'Abitur',
+            'country' => 'de',
+            'posted_at' => '2026-10-15 08:30:00',
+        ]);
+
+        $this->assertNotNull($result);
+        $this->assertTrue($result['created']);
+
+        $listing = $result['listing']->fresh();
+        $this->assertSame('https://example.test/prd-1/apply', $listing->apply_url);
+        $this->assertSame('Ward nurse role.', $listing->description);
+        $this->assertSame('B2 German', $listing->language_requirement);
+        $this->assertSame('Abitur', $listing->education_requirement);
+        $this->assertSame('DE', $listing->country);
+        $this->assertNotNull($listing->posted_at);
+        $this->assertTrue($listing->posted_at->equalTo('2026-10-15 08:30:00'));
     }
 
     public function test_same_external_id_on_second_run_updates_last_seen_at_only(): void

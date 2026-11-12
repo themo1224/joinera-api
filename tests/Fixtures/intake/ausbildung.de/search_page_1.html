@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Ausbildung.de Suche — Joinera fixture</title>
+</head>
+<body data-joinera-fixture="search">
+  <h1>Suchergebnisse</h1>
+
+  <!-- Valid card 1 -->
+  <div data-testid="jp-card">
+    <a href="/stellen/ausbildung-zum-hoerakustiker-m-w-d-chemnitz-altendorf-bei-geers-sonova-retail-deutschland-gmbh-in-auerbach-vogtl-fb079a87-e145-457c-9bda-8f471d8541d6/">
+      <h3 data-testid="jp-title">Ausbildung zum Hörakustiker (m/w/d) Chemnitz Altendorf</h3>
+      <h4 data-testid="jp-customer">bei GEERS (Sonova Retail Deutschland GmbH)</h4>
+      <span data-testid="jp-branches">08209 Auerbach/Vogtl. + 240 weitere</span>
+    </a>
+  </div>
+
+  <!-- Valid card 2 -->
+  <div data-testid="jp-card">
+    <a href="/stellen/ausbildung-kaufmann-frau-im-einzelhandel-m-w-d-bei-norma-lebensmittelfilialbetrieb-stiftung-co-kg-in-treuen-f74973f2-b9ad-46be-896e-d316ea313d77/">
+      <h3 data-testid="jp-title">Ausbildung Kaufmann/-frau im Einzelhandel (m/w/d)</h3>
+      <h4 data-testid="jp-customer">bei Norma Lebensmittelfilialbetrieb Stiftung &amp; Co. KG</h4>
+      <span data-testid="jp-branches">08541 Treuen</span>
+    </a>
+  </div>
+
+  <!-- Valid card 3 -->
+  <div data-testid="jp-card">
+    <a href="/stellen/ausbildung-pflegefachmann-pflegefachfrau-m-w-d-bei-helios-kliniken-gmbh-in-plauen-48156547-df59-48fb-b2d3-be12cacc25c3/">
+      <h3 data-testid="jp-title">Ausbildung Pflegefachmann/Pflegefachfrau (m/w/d)</h3>
+      <h4 data-testid="jp-customer">bei Helios Kliniken GmbH</h4>
+      <span data-testid="jp-branches">08523 Plauen + 3 weitere</span>
+    </a>
+  </div>
+
+  <!-- Broken card: no UUID in path — must be skipped -->
+  <div data-testid="jp-card">
+    <a href="/stellen/broken-listing-without-id/">
+      <h3 data-testid="jp-title">Broken listing without UUID</h3>
+      <h4 data-testid="jp-customer">bei Broken GmbH</h4>
+      <span data-testid="jp-branches">Berlin</span>
+    </a>
+  </div>
+</body>
+</html>

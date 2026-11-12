@@ -55,7 +55,12 @@ class FixtureSiteIntakeAdapter implements SiteIntakeAdapter
                 'company' => 'Acme GmbH',
                 'city' => 'Berlin',
                 'url' => 'https://example.test/jobs/1',
+                'apply_url' => 'https://example.test/jobs/1/apply',
+                'description' => 'Build software in Berlin.',
+                'language_requirement' => 'B1 German',
+                'education_requirement' => 'Bachelor',
                 'country' => 'DE',
+                'posted_at' => '2026-11-01T10:00:00+00:00',
             ],
             [
                 'external_id' => 'ausbildung-1',
@@ -65,7 +70,12 @@ class FixtureSiteIntakeAdapter implements SiteIntakeAdapter
                 'company' => 'Tech AG',
                 'city' => 'Munich',
                 'url' => 'https://example.test/ausbildung/1',
+                'apply_url' => null,
+                'description' => null,
+                'language_requirement' => null,
+                'education_requirement' => null,
                 'country' => 'DE',
+                'posted_at' => null,
             ],
         ];
 

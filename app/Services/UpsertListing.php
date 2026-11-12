@@ -45,6 +45,12 @@ class UpsertListing
         $fingerprint = $this->fingerprint($title, $company, $city, $url);
         $category = $payload['category'] ?? null;
         $category = is_string($category) && $category !== '' ? $category : null;
+        $applyUrl = $this->nullableString($payload, 'apply_url');
+        $description = $this->nullableString($payload, 'description');
+        $languageRequirement = $this->nullableString($payload, 'language_requirement');
+        $educationRequirement = $this->nullableString($payload, 'education_requirement');
+        $country = $this->nullableCountry($payload);
+        $postedAt = $this->nullablePostedAt($payload);
 
         $existing = $this->findExisting($source, $externalId, $fingerprint);
         $now = Carbon::now();
@@ -66,6 +72,12 @@ class UpsertListing
             'company' => $company,
             'city' => $city,
             'url' => $url,
+            'apply_url' => $applyUrl,
+            'description' => $description,
+            'language_requirement' => $languageRequirement,
+            'education_requirement' => $educationRequirement,
+            'country' => $country,
+            'posted_at' => $postedAt,
             'first_seen_at' => $now,
             'last_seen_at' => $now,
         ]);
@@ -116,6 +128,40 @@ class UpsertListing
             'ausbildung' => ListingKind::Ausbildung,
             default => throw new ListingDroppedException('Listing kind is required.'),
         };
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function nullableString(array $payload, string $key): ?string
+    {
+        $value = $payload[$key] ?? null;
+
+        return is_string($value) && $value !== '' ? $value : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function nullableCountry(array $payload): ?string
+    {
+        if (! array_key_exists('country', $payload) || $payload['country'] === null || $payload['country'] === '') {
+            return null;
+        }
+
+        return strtoupper(trim((string) $payload['country']));
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function nullablePostedAt(array $payload): ?Carbon
+    {
+        if (! array_key_exists('posted_at', $payload) || $payload['posted_at'] === null || $payload['posted_at'] === '') {
+            return null;
+        }
+
+        return Carbon::parse($payload['posted_at']);
     }
 
     private function fingerprint(string $title, string $company, string $city, string $url): string

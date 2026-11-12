@@ -60,4 +60,4 @@ curl -L -A "JoineraFixtureCapture/1.0" -o detail_sample.html "https://www.azubiy
 
 Trim huge logo/SVG/nav blocks before committing; keep JobPosting JSON-LD and apply links. Do not commit cookies or credentials. CI always uses Fake HTTP (`APP_ENV=testing` or `JOINERA_AZUBIYO_HTTP=fake`).
 
-**Enabled** with `ausbildung.de` via `JOINERA_SITES_V1` (default `ausbildung.de,azubiyo`) and registered in `SiteIntakeAdapterRegistry`.
+**Enabled** with `ausbildung.de` via `JOINERA_SITES_V1` (default `ausbildung.de,azubiyo`) and registered in `SiteIntakeAdapterRegistry`. Add-site checklist: see comment above `sites.v1` in `api/config/joinera.php`.

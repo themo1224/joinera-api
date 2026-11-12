@@ -9,7 +9,9 @@ use App\Models\Listing;
 use App\Services\AusbildungDe\AusbildungDeIntakeAdapter;
 use App\Services\Azubiyo\AzubiyoIntakeAdapter;
 use App\Services\Azubiyo\FakeAzubiyoHttpClient;
+use App\Services\FixtureSiteIntakeAdapter;
 use App\Services\SiteIntakeAdapterRegistry;
+use App\Services\ThrowingSiteIntakeAdapter;
 use App\Services\UpsertListing;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
@@ -276,5 +278,76 @@ class AzubiyoIntakeAdapterTest extends TestCase
         $this->assertSame(IntakeRunSiteStatus::Ok, $azubiyoSite->status);
         $this->assertGreaterThan(0, Listing::query()->where('source', 'ausbildung.de')->count());
         $this->assertGreaterThan(0, Listing::query()->where('source', 'azubiyo')->count());
+    }
+
+    public function test_intake_run_one_real_board_throwing_still_completes_sibling_boards(): void
+    {
+        Event::fake();
+
+        config([
+            'joinera.sites.v1' => ['ausbildung.de', 'azubiyo'],
+            'joinera.sites.adapters.ausbildung_de.max_pages' => 1,
+            'joinera.sites.adapters.azubiyo.max_pages' => 1,
+        ]);
+
+        $this->app->make(SiteIntakeAdapterRegistry::class)
+            ->register('azubiyo', new ThrowingSiteIntakeAdapter);
+
+        $this->artisan('intake:run')->assertSuccessful();
+
+        $azubiyoSite = IntakeRunSite::query()->where('site', 'azubiyo')->first();
+        $ausbildungSite = IntakeRunSite::query()->where('site', 'ausbildung.de')->first();
+
+        $this->assertNotNull($azubiyoSite);
+        $this->assertSame(IntakeRunSiteStatus::Failed, $azubiyoSite->status);
+        $this->assertNotEmpty($azubiyoSite->error);
+        $this->assertSame(0, $azubiyoSite->listings_created);
+
+        $this->assertNotNull($ausbildungSite);
+        $this->assertSame(IntakeRunSiteStatus::Ok, $ausbildungSite->status);
+        $this->assertGreaterThan(0, $ausbildungSite->listings_created);
+
+        $this->assertNotNull(IntakeRun::query()->first()?->finished_at);
+        $this->assertGreaterThan(0, Listing::query()->where('source', 'ausbildung.de')->count());
+        $this->assertSame(0, Listing::query()->where('source', 'azubiyo')->count());
+    }
+
+    public function test_intake_run_loops_three_sites_when_middle_throws(): void
+    {
+        Event::fake();
+
+        config([
+            'joinera.sites.v1' => ['ausbildung.de', 'azubiyo', 'fixture_c'],
+            'joinera.sites.adapters.ausbildung_de.max_pages' => 1,
+            'joinera.sites.adapters.azubiyo.max_pages' => 1,
+        ]);
+
+        $registry = $this->app->make(SiteIntakeAdapterRegistry::class);
+        $registry->register('azubiyo', new ThrowingSiteIntakeAdapter);
+        $registry->register('fixture_c', new FixtureSiteIntakeAdapter);
+
+        $this->artisan('intake:run')->assertSuccessful();
+
+        $ausbildungSite = IntakeRunSite::query()->where('site', 'ausbildung.de')->first();
+        $azubiyoSite = IntakeRunSite::query()->where('site', 'azubiyo')->first();
+        $fixtureSite = IntakeRunSite::query()->where('site', 'fixture_c')->first();
+
+        $this->assertNotNull($ausbildungSite);
+        $this->assertSame(IntakeRunSiteStatus::Ok, $ausbildungSite->status);
+        $this->assertGreaterThan(0, $ausbildungSite->listings_created);
+
+        $this->assertNotNull($azubiyoSite);
+        $this->assertSame(IntakeRunSiteStatus::Failed, $azubiyoSite->status);
+        $this->assertNotEmpty($azubiyoSite->error);
+        $this->assertSame(0, $azubiyoSite->listings_created);
+
+        $this->assertNotNull($fixtureSite);
+        $this->assertSame(IntakeRunSiteStatus::Ok, $fixtureSite->status);
+        $this->assertGreaterThan(0, $fixtureSite->listings_created);
+
+        $this->assertNotNull(IntakeRun::query()->first()?->finished_at);
+        $this->assertGreaterThan(0, Listing::query()->where('source', 'ausbildung.de')->count());
+        $this->assertSame(0, Listing::query()->where('source', 'azubiyo')->count());
+        $this->assertGreaterThan(0, Listing::query()->where('source', 'fixture_c')->count());
     }
 }

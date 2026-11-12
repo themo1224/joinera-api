@@ -42,4 +42,4 @@ curl -L -A "JoineraFixtureCapture/1.0" -o search_page_1.html "https://www.ausbil
 curl -L -A "JoineraFixtureCapture/1.0" -o detail_sample.html "https://www.ausbildung.de/stellen/<slug>-<uuid>/"
 ```
 
-Do not commit cookies or credentials. CI always uses Fake HTTP (`APP_ENV=testing` or `JOINERA_AUSBILDUNG_DE_HTTP=fake`).
+Do not commit cookies or credentials. CI always uses Fake HTTP (`APP_ENV=testing` or `JOINERA_AUSBILDUNG_DE_HTTP=fake`). Add-site checklist: see comment above `sites.v1` in `api/config/joinera.php`.

@@ -79,10 +79,23 @@ class FakeAzubiyoHttpClient implements AzubiyoHttpClient
             return 'detail_sample.html';
         }
 
-        if (
-            str_contains($path, '/stellenmarkt')
-            || preg_match('#(^|/)ausbildung(/|$)#', $path) === 1
-        ) {
+        if (str_contains($path, '/stellenmarkt')) {
+            if (preg_match('#/stellenmarkt/(\d+)/?$#', $path, $matches) === 1) {
+                $page = (int) $matches[1];
+
+                if ($page >= 3) {
+                    return 'search_page_empty.html';
+                }
+
+                if ($page >= 2) {
+                    return 'search_page_2.html';
+                }
+            }
+
+            return 'search_page_1.html';
+        }
+
+        if (preg_match('#(^|/)ausbildung(/|$)#', $path) === 1) {
             return 'search_page_1.html';
         }
 

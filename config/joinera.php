@@ -25,10 +25,10 @@ return [
         'registrar' => env('JOINERA_DOMAIN_REGISTRAR'),
     ],
     'sites' => [
-        // Comma-separated env; default empty so IntakeTest / prod-like deploys stay safe.
+        // Comma-separated env; Q12 boards enabled by default. Tests override via config().
         'v1' => array_values(array_filter(array_map(
             static fn (string $site): string => trim($site),
-            explode(',', (string) env('JOINERA_SITES_V1', '')),
+            explode(',', (string) env('JOINERA_SITES_V1', 'ausbildung.de,azubiyo')),
         ))),
         'allow_non_de' => (bool) env('JOINERA_SITES_ALLOW_NON_DE', false),
         'adapters' => [
@@ -42,6 +42,7 @@ return [
             'azubiyo' => [
                 'search_url' => env('JOINERA_AZUBIYO_SEARCH_URL', 'https://www.azubiyo.de/stellenmarkt/'),
                 'base_url' => env('JOINERA_AZUBIYO_BASE_URL', 'https://www.azubiyo.de'),
+                'max_pages' => max(1, (int) env('JOINERA_AZUBIYO_MAX_PAGES', 5)),
                 // live | fake — testing env always uses Fake in AppServiceProvider.
                 'http' => env('JOINERA_AZUBIYO_HTTP', 'live'),
             ],

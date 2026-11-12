@@ -2,6 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Enums\IntakeRunSiteStatus;
+use App\Models\IntakeRun;
+use App\Models\IntakeRunSite;
 use App\Models\Listing;
 use App\Services\AusbildungDe\AusbildungDeIntakeAdapter;
 use App\Services\Azubiyo\AzubiyoIntakeAdapter;
@@ -38,6 +41,8 @@ class AzubiyoIntakeAdapterTest extends TestCase
 
     public function test_adapter_is_instantiable_and_search_uses_fake_fixture(): void
     {
+        config(['joinera.sites.adapters.azubiyo.max_pages' => 1]);
+
         $fake = new FakeAzubiyoHttpClient;
         $adapter = new AzubiyoIntakeAdapter($fake);
 
@@ -55,6 +60,8 @@ class AzubiyoIntakeAdapterTest extends TestCase
      */
     public function test_parse_list_from_fixture_yields_stable_external_ids_and_absolute_urls(): void
     {
+        config(['joinera.sites.adapters.azubiyo.max_pages' => 1]);
+
         $fake = new FakeAzubiyoHttpClient;
         $adapter = new AzubiyoIntakeAdapter($fake);
 
@@ -85,11 +92,55 @@ class AzubiyoIntakeAdapterTest extends TestCase
         $this->assertSame('expert SE', $items[0]['company']);
     }
 
+    public function test_parse_list_unions_unique_external_ids_across_pages(): void
+    {
+        config(['joinera.sites.adapters.azubiyo.max_pages' => 5]);
+
+        $fake = new FakeAzubiyoHttpClient;
+        $adapter = new AzubiyoIntakeAdapter($fake);
+
+        $search = $adapter->search();
+        $items = $adapter->parseList($search);
+
+        // page1: 2 valid, page2: 2 valid, page3 empty → stop. Union = 4.
+        $this->assertCount(4, $items);
+        $this->assertCount(2, $search['pages']);
+
+        $externalIds = array_column($items, 'external_id');
+        $this->assertSame($externalIds, array_values(array_unique($externalIds)));
+        $this->assertContains('66195a74', $externalIds);
+        $this->assertContains('bga9a4a4', $externalIds);
+        $this->assertContains('eacaa2g6', $externalIds);
+        $this->assertContains('9g2g5g8b', $externalIds);
+    }
+
+    public function test_search_stops_early_when_later_pages_add_no_new_ids(): void
+    {
+        config(['joinera.sites.adapters.azubiyo.max_pages' => 5]);
+
+        // Force /stellenmarkt/2+/ to replay page 1 so dedupe finds zero new ids.
+        $fake = (new FakeAzubiyoHttpClient)->withPathOverrides([
+            '/stellenmarkt/2' => 'search_page_1.html',
+            '/stellenmarkt/3' => 'search_page_1.html',
+            '/stellenmarkt/4' => 'search_page_1.html',
+            '/stellenmarkt/5' => 'search_page_1.html',
+        ]);
+        $adapter = new AzubiyoIntakeAdapter($fake);
+
+        $search = $adapter->search();
+
+        $this->assertCount(2, $search['pages']);
+        $this->assertCount(2, $fake->requestedUrls);
+        $this->assertCount(2, $adapter->parseList($search));
+    }
+
     /**
      * Detail: JobPosting JSON-LD + a[href*="bewerben"]; external_id stays list trailing token.
      */
     public function test_parse_detail_from_fixture_returns_upsert_payload(): void
     {
+        config(['joinera.sites.adapters.azubiyo.max_pages' => 1]);
+
         $fake = new FakeAzubiyoHttpClient;
         $adapter = new AzubiyoIntakeAdapter($fake);
 
@@ -143,6 +194,7 @@ class AzubiyoIntakeAdapterTest extends TestCase
     public function test_parse_detail_then_upsert_creates_once_and_dedupes_by_external_id(): void
     {
         Event::fake();
+        config(['joinera.sites.adapters.azubiyo.max_pages' => 1]);
 
         $fake = new FakeAzubiyoHttpClient;
         $adapter = new AzubiyoIntakeAdapter($fake);
@@ -167,7 +219,7 @@ class AzubiyoIntakeAdapterTest extends TestCase
         $this->assertNotNull($first['listing']->posted_at);
     }
 
-    public function test_registry_does_not_auto_register_azubiyo_until_plan_3d(): void
+    public function test_registry_registers_azubiyo_and_ausbildung_de_by_default(): void
     {
         $registry = $this->app->make(SiteIntakeAdapterRegistry::class);
 
@@ -175,19 +227,54 @@ class AzubiyoIntakeAdapterTest extends TestCase
             AusbildungDeIntakeAdapter::class,
             $registry->get('ausbildung.de'),
         );
-        $this->assertNull($registry->get('azubiyo'));
+        $this->assertInstanceOf(
+            AzubiyoIntakeAdapter::class,
+            $registry->get('azubiyo'),
+        );
     }
 
-    public function test_registry_can_register_azubiyo_adapter_in_test(): void
+    public function test_intake_run_with_azubiyo_creates_listings_via_fake_http(): void
     {
-        $fake = new FakeAzubiyoHttpClient;
-        $adapter = new AzubiyoIntakeAdapter($fake);
-        $registry = $this->app->make(SiteIntakeAdapterRegistry::class);
+        Event::fake();
 
-        $this->assertNull($registry->get('azubiyo'));
+        config([
+            'joinera.sites.v1' => ['azubiyo'],
+            'joinera.sites.adapters.azubiyo.max_pages' => 1,
+        ]);
 
-        $registry->register('azubiyo', $adapter);
+        $this->artisan('intake:run')->assertSuccessful();
 
-        $this->assertSame($adapter, $registry->get('azubiyo'));
+        $site = IntakeRunSite::query()->where('site', 'azubiyo')->first();
+        $this->assertNotNull($site);
+        $this->assertSame(IntakeRunSiteStatus::Ok, $site->status);
+        $this->assertGreaterThan(0, $site->listings_created);
+        $this->assertSame(
+            $site->listings_created,
+            Listing::query()->where('source', 'azubiyo')->count(),
+        );
+        $this->assertNotNull(IntakeRun::query()->first()?->finished_at);
+    }
+
+    public function test_intake_run_with_both_boards_creates_listings_from_each_source(): void
+    {
+        Event::fake();
+
+        config([
+            'joinera.sites.v1' => ['ausbildung.de', 'azubiyo'],
+            'joinera.sites.adapters.ausbildung_de.max_pages' => 1,
+            'joinera.sites.adapters.azubiyo.max_pages' => 1,
+        ]);
+
+        $this->artisan('intake:run')->assertSuccessful();
+
+        $ausbildungSite = IntakeRunSite::query()->where('site', 'ausbildung.de')->first();
+        $azubiyoSite = IntakeRunSite::query()->where('site', 'azubiyo')->first();
+
+        $this->assertNotNull($ausbildungSite);
+        $this->assertNotNull($azubiyoSite);
+        $this->assertSame(IntakeRunSiteStatus::Ok, $ausbildungSite->status);
+        $this->assertSame(IntakeRunSiteStatus::Ok, $azubiyoSite->status);
+        $this->assertGreaterThan(0, Listing::query()->where('source', 'ausbildung.de')->count());
+        $this->assertGreaterThan(0, Listing::query()->where('source', 'azubiyo')->count());
     }
 }

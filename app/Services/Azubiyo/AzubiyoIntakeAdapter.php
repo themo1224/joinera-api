@@ -22,7 +22,9 @@ use RuntimeException;
  * external_id = trailing token after last `_` on
  * /stellenanzeigen/{slug}_{id}/ (never JobPosting identifier / Ausbildung.de UUID).
  *
- * Page 1 only for now — pagination is Plan 3D.
+ * Pagination: /stellenmarkt/{n}/ (page 1 = bare search_url). Hard cap:
+ * joinera.sites.adapters.azubiyo.max_pages (default 5). Stops on empty page
+ * or zero new external_ids.
  */
 class AzubiyoIntakeAdapter implements SiteIntakeAdapter
 {
@@ -37,22 +39,61 @@ class AzubiyoIntakeAdapter implements SiteIntakeAdapter
      */
     public function search(): array
     {
-        $url = (string) config(
+        $maxPages = max(1, (int) config('joinera.sites.adapters.azubiyo.max_pages', 5));
+        $seenIds = [];
+        $pages = [];
+
+        for ($page = 1; $page <= $maxPages; $page++) {
+            $url = $this->searchPageUrl($page);
+            $body = $this->http->get($url);
+            $pageItems = $this->parseBodyItems($body);
+
+            if ($pageItems === []) {
+                break;
+            }
+
+            $newCount = 0;
+
+            foreach ($pageItems as $item) {
+                $id = (string) ($item['external_id'] ?? '');
+
+                if ($id === '' || isset($seenIds[$id])) {
+                    continue;
+                }
+
+                $seenIds[$id] = true;
+                $newCount++;
+            }
+
+            $pages[] = [
+                'page' => $page,
+                'url' => $url,
+                'body' => $body,
+            ];
+
+            if ($newCount === 0) {
+                break;
+            }
+        }
+
+        return [
+            'pages' => $pages,
+            'body' => $pages[0]['body'] ?? '',
+        ];
+    }
+
+    private function searchPageUrl(int $page): string
+    {
+        $base = (string) config(
             'joinera.sites.adapters.azubiyo.search_url',
             'https://www.azubiyo.de/stellenmarkt/',
         );
-        $body = $this->http->get($url);
 
-        return [
-            'pages' => [
-                [
-                    'page' => 1,
-                    'url' => $url,
-                    'body' => $body,
-                ],
-            ],
-            'body' => $body,
-        ];
+        if ($page <= 1) {
+            return $base;
+        }
+
+        return rtrim($base, '/').'/'.$page.'/';
     }
 
     /**

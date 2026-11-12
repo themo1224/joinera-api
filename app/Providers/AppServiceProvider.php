@@ -12,6 +12,7 @@ use App\Contracts\MailboxProvider;
 use App\Services\AusbildungDe\AusbildungDeIntakeAdapter;
 use App\Services\AusbildungDe\FakeAusbildungDeHttpClient;
 use App\Services\AusbildungDe\LaravelAusbildungDeHttpClient;
+use App\Services\Azubiyo\AzubiyoIntakeAdapter;
 use App\Services\Azubiyo\FakeAzubiyoHttpClient;
 use App\Services\Azubiyo\LaravelAzubiyoHttpClient;
 use App\Services\FakeMailboxInboundSync;
@@ -81,7 +82,10 @@ class AppServiceProvider extends ServiceProvider
                 'ausbildung.de',
                 $app->make(AusbildungDeIntakeAdapter::class),
             );
-            // azubiyo stays out of the default registry until Plan 3D enablement.
+            $registry->register(
+                'azubiyo',
+                $app->make(AzubiyoIntakeAdapter::class),
+            );
 
             return $registry;
         });

@@ -77,5 +77,31 @@ return [
     'queues' => [
         'intake' => 'intake',
         'alerts' => 'alerts',
+        'match' => env('JOINERA_QUEUE_MATCH', 'match'),
+    ],
+    'apply' => [
+        // Q17: Applications per Candidate per active window (not profile CVs).
+        'cap' => max(1, (int) env('JOINERA_APPLY_CAP', 10)),
+        'cap_window' => env('JOINERA_APPLY_CAP_WINDOW', 'daily'), // daily|weekly
+    ],
+    // LLM port for later preparing_docs / cover+CV. Swap driver without rewriting jobs.
+    'ai' => [
+        // openrouter | fake — testing env always uses Fake in AppServiceProvider.
+        'driver' => env('JOINERA_AI_DRIVER', 'openrouter'),
+        'openrouter' => [
+            'api_key' => env('OPENROUTER_API_KEY'),
+            'base_url' => rtrim((string) env('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'), '/'),
+            // Primary model. For free-only experiments use openrouter/free or a *:free id.
+            'model' => env('OPENROUTER_MODEL', 'openrouter/free'),
+            // Comma-separated extra fallbacks tried after primary (rate-limit / downtime).
+            // Keep only :free / openrouter/free entries to avoid paid surprise bills.
+            'fallback_models' => array_values(array_filter(array_map(
+                static fn (string $model): string => trim($model),
+                explode(',', (string) env('OPENROUTER_FALLBACK_MODELS', '')),
+            ))),
+            'http_referer' => env('OPENROUTER_HTTP_REFERER'),
+            'app_title' => env('OPENROUTER_APP_TITLE', 'Joinera'),
+            'timeout' => max(5, (int) env('OPENROUTER_TIMEOUT', 60)),
+        ],
     ],
 ];

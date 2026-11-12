@@ -7,9 +7,12 @@ use App\Contracts\AusbildungDeHttpClient;
 use App\Contracts\AzubiyoHttpClient;
 use App\Contracts\CvParser;
 use App\Contracts\DomainRegistrar;
+use App\Contracts\LlmClient;
 use App\Contracts\MailboxInboundSync;
 use App\Contracts\MailboxOutboundMailer;
 use App\Contracts\MailboxProvider;
+use App\Services\Ai\FakeLlmClient;
+use App\Services\Ai\OpenRouterLlmClient;
 use App\Services\ArbeitsagenturDe\ArbeitsagenturDeIntakeAdapter;
 use App\Services\ArbeitsagenturDe\FakeArbeitsagenturDeHttpClient;
 use App\Services\ArbeitsagenturDe\LaravelArbeitsagenturDeHttpClient;
@@ -40,6 +43,14 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(CvParser::class, FixtureCvParser::class);
+
+        $this->app->bind(LlmClient::class, function ($app) {
+            if ($this->useFakeLlmClient()) {
+                return $app->make(FakeLlmClient::class);
+            }
+
+            return $app->make(OpenRouterLlmClient::class);
+        });
 
         // Legacy domain provision ports — no longer used by apply-mail path.
         $this->app->singleton(MailboxProvider::class, LocalMailboxProvider::class);
@@ -143,6 +154,13 @@ class AppServiceProvider extends ServiceProvider
     private function useFakeArbeitsagenturDeHttp(): bool
     {
         $driver = config('joinera.sites.adapters.arbeitsagentur_de.http');
+
+        return $driver === 'fake' || $this->app->environment('testing');
+    }
+
+    private function useFakeLlmClient(): bool
+    {
+        $driver = config('joinera.ai.driver');
 
         return $driver === 'fake' || $this->app->environment('testing');
     }

@@ -67,6 +67,14 @@ class User extends Authenticatable
         return $this->hasMany(SiteIdentity::class);
     }
 
+    /**
+     * @return HasMany<CandidateListingMatch, $this>
+     */
+    public function candidateListingMatches(): HasMany
+    {
+        return $this->hasMany(CandidateListingMatch::class);
+    }
+
     public function ensureProfile(): Profile
     {
         return $this->profile()->firstOrCreate([]);

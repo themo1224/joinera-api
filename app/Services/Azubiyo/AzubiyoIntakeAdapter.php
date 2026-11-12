@@ -8,6 +8,7 @@ use DOMDocument;
 use DOMElement;
 use DOMNode;
 use DOMXPath;
+use RuntimeException;
 
 /**
  * Source key MUST be exactly `azubiyo` when registering / upserting.
@@ -16,10 +17,12 @@ use DOMXPath;
  * a[href*="/stellenanzeigen/"], span.h3 (title), span.text-secondary (company),
  * last ul.list-unstyled li for city (PLZ + Ort).
  *
+ * Detail: application/ld+json JobPosting; Schulabschluss: … fallback;
+ * a[Bewerb…] with href containing bewerben for apply_url.
  * external_id = trailing token after last `_` on
- * /stellenanzeigen/{slug}_{id}/ (never Ausbildung.de UUID rules).
+ * /stellenanzeigen/{slug}_{id}/ (never JobPosting identifier / Ausbildung.de UUID).
  *
- * Page 1 only for now — pagination is Plan 3D. parseDetail remains a stub.
+ * Page 1 only for now — pagination is Plan 3D.
  */
 class AzubiyoIntakeAdapter implements SiteIntakeAdapter
 {
@@ -95,7 +98,53 @@ class AzubiyoIntakeAdapter implements SiteIntakeAdapter
      */
     public function parseDetail(array $listItem): array
     {
-        return [];
+        $url = trim((string) ($listItem['url'] ?? ''));
+
+        if ($url === '') {
+            throw new RuntimeException('Azubiyo list item is missing url for parseDetail.');
+        }
+
+        $html = $this->http->get($url);
+        $jobPosting = $this->extractJobPosting($html);
+        [$dom, $xpath] = $this->loadDom($html);
+
+        $title = $this->nonEmptyString($jobPosting['title'] ?? null)
+            ?? $this->firstText($xpath, $dom, '//h1')
+            ?? $this->nonEmptyString($listItem['title'] ?? null);
+
+        $company = $this->nonEmptyString(data_get($jobPosting, 'hiringOrganization.name'))
+            ?? $this->firstText($xpath, $dom, '//*[@data-azy-company]')
+            ?? $this->nonEmptyString($listItem['company'] ?? null);
+
+        $city = $this->extractDetailCity($jobPosting, $xpath, $dom)
+            ?? $this->nonEmptyString($listItem['city'] ?? null);
+
+        $country = $this->normalizeCountry($this->jobLocationCountry($jobPosting)) ?? 'DE';
+
+        $description = $this->nonEmptyString($jobPosting['description'] ?? null)
+            ?? $this->firstText($xpath, $dom, '//*[@data-azy-description]');
+
+        $education = $this->extractEducationRequirement($jobPosting, $xpath, $dom);
+        $applyUrl = $this->extractApplyUrl($xpath, $dom, $url);
+        $postedAt = $this->nonEmptyString($jobPosting['datePosted'] ?? null)
+            ?? $this->firstAttribute($xpath, $dom, '//*[@data-azy-posted-at]', 'data-azy-posted-at');
+        $externalId = $this->resolveExternalId($listItem, $url);
+
+        return [
+            'external_id' => $externalId,
+            'kind' => $this->nonEmptyString($listItem['kind'] ?? null) ?? 'ausbildung',
+            'title' => $title,
+            'company' => $company,
+            'city' => $city,
+            'url' => $url,
+            'apply_url' => $applyUrl,
+            'description' => $description,
+            'language_requirement' => null,
+            'education_requirement' => $education,
+            'country' => $country,
+            'posted_at' => $postedAt,
+            'category' => null,
+        ];
     }
 
     /**
@@ -160,7 +209,7 @@ class AzubiyoIntakeAdapter implements SiteIntakeAdapter
         $externalId = strtolower($matches[1]);
         $title = $this->firstText($xpath, $card, './/span[contains(concat(" ", normalize-space(@class), " "), " h3 ")]');
         $company = $this->firstText($xpath, $card, './/span[contains(concat(" ", normalize-space(@class), " "), " text-secondary ")]');
-        $city = $this->extractCity($xpath, $card);
+        $city = $this->extractListCity($xpath, $card);
 
         return [
             'external_id' => $externalId,
@@ -172,7 +221,7 @@ class AzubiyoIntakeAdapter implements SiteIntakeAdapter
         ];
     }
 
-    private function extractCity(DOMXPath $xpath, DOMNode $card): ?string
+    private function extractListCity(DOMXPath $xpath, DOMNode $card): ?string
     {
         $nodes = $xpath->query('.//ul[contains(concat(" ", normalize-space(@class), " "), " list-unstyled ")]//li', $card);
 
@@ -187,16 +236,240 @@ class AzubiyoIntakeAdapter implements SiteIntakeAdapter
                 continue;
             }
 
-            // Skip start-date lines like 01.08.2027.
             if (preg_match('/^\d{2}\.\d{2}\.\d{4}$/', $text) === 1) {
                 continue;
             }
 
-            // Prefer PLZ + Ort; otherwise take the last non-date line.
             return $text;
         }
 
         return null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function extractJobPosting(string $html): array
+    {
+        $dom = new DOMDocument;
+        @$dom->loadHTML($html, LIBXML_NOERROR | LIBXML_NOWARNING);
+        $scripts = $dom->getElementsByTagName('script');
+
+        foreach ($scripts as $script) {
+            if (! $script instanceof DOMElement) {
+                continue;
+            }
+
+            if (strtolower($script->getAttribute('type')) !== 'application/ld+json') {
+                continue;
+            }
+
+            $decoded = json_decode(trim($script->textContent), true);
+
+            if (! is_array($decoded)) {
+                continue;
+            }
+
+            $candidates = array_is_list($decoded) ? $decoded : [$decoded];
+
+            foreach ($candidates as $candidate) {
+                if (is_array($candidate) && ($candidate['@type'] ?? null) === 'JobPosting') {
+                    return $candidate;
+                }
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * @return array{0: DOMDocument, 1: DOMXPath}
+     */
+    private function loadDom(string $html): array
+    {
+        $dom = new DOMDocument;
+        @$dom->loadHTML($html, LIBXML_NOERROR | LIBXML_NOWARNING);
+
+        return [$dom, new DOMXPath($dom)];
+    }
+
+    /**
+     * @param  array<string, mixed>  $jobPosting
+     */
+    private function extractDetailCity(array $jobPosting, DOMXPath $xpath, DOMDocument $dom): ?string
+    {
+        $address = $this->jobLocationAddress($jobPosting);
+        $locality = $this->nonEmptyString(data_get($address, 'addressLocality'));
+        $postal = $this->nonEmptyString(data_get($address, 'postalCode'));
+
+        if ($locality !== null) {
+            // Prefer first locality token when live JSON lists multiple cities.
+            $primary = trim(explode(',', $locality, 2)[0]);
+            if ($postal !== null) {
+                return $postal.' '.$primary;
+            }
+
+            return $primary !== '' ? $primary : $locality;
+        }
+
+        $fromDom = $this->firstText($xpath, $dom, '//*[@data-azy-city]');
+
+        if ($fromDom === null) {
+            return null;
+        }
+
+        return trim(preg_replace('/,\s*Deutschland$/iu', '', $fromDom) ?? $fromDom) ?: null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $jobPosting
+     * @return array<string, mixed>|null
+     */
+    private function jobLocationAddress(array $jobPosting): ?array
+    {
+        $location = $jobPosting['jobLocation'] ?? null;
+
+        if (is_array($location) && array_is_list($location)) {
+            $location = $location[0] ?? null;
+        }
+
+        if (! is_array($location)) {
+            return null;
+        }
+
+        $address = $location['address'] ?? null;
+
+        return is_array($address) ? $address : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $jobPosting
+     */
+    private function jobLocationCountry(array $jobPosting): mixed
+    {
+        $address = $this->jobLocationAddress($jobPosting);
+
+        if ($address === null) {
+            return null;
+        }
+
+        return $address['addressCountry']['name']
+            ?? $address['addressCountry']
+            ?? null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $jobPosting
+     */
+    private function extractEducationRequirement(array $jobPosting, DOMXPath $xpath, DOMDocument $dom): ?string
+    {
+        $fromJson = $jobPosting['educationRequirements'] ?? null;
+
+        if (is_string($fromJson) && trim($fromJson) !== '') {
+            return trim($fromJson);
+        }
+
+        if (is_array($fromJson)) {
+            $nested = $fromJson['credentialCategory']
+                ?? $fromJson['name']
+                ?? $fromJson['@value']
+                ?? null;
+
+            if (is_string($nested) && trim($nested) !== '') {
+                return trim($nested);
+            }
+        }
+
+        $bodyText = trim(preg_replace('/\s+/u', ' ', $dom->textContent ?? '') ?? '');
+
+        if (preg_match('/Schulabschluss:\s*([^.;,\n]+)/iu', $bodyText, $matches) === 1) {
+            $value = trim($matches[1]);
+
+            return $value !== '' ? $value : null;
+        }
+
+        return null;
+    }
+
+    private function extractApplyUrl(DOMXPath $xpath, DOMDocument $dom, string $listingUrl): ?string
+    {
+        $anchors = $xpath->query('//a[contains(translate(@href, "BEWERBEN", "bewerben"), "bewerben")]');
+
+        if ($anchors === false) {
+            return null;
+        }
+
+        foreach ($anchors as $anchor) {
+            if (! $anchor instanceof DOMElement) {
+                continue;
+            }
+
+            $href = trim($anchor->getAttribute('href'));
+
+            if ($href === '') {
+                continue;
+            }
+
+            $applyUrl = $this->absolutizeUrl($href, $this->baseUrl());
+
+            if ($applyUrl === $listingUrl) {
+                continue;
+            }
+
+            return $applyUrl;
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $listItem
+     */
+    private function resolveExternalId(array $listItem, string $url): ?string
+    {
+        $fromList = $this->nonEmptyString($listItem['external_id'] ?? null);
+
+        if ($fromList !== null) {
+            return strtolower($fromList);
+        }
+
+        $path = parse_url($url, PHP_URL_PATH) ?: '';
+
+        if (preg_match(self::EXTERNAL_ID_PATTERN, $path, $matches) === 1) {
+            return strtolower($matches[1]);
+        }
+
+        return null;
+    }
+
+    private function normalizeCountry(mixed $country): ?string
+    {
+        if (is_array($country)) {
+            $country = $country['name'] ?? $country['@value'] ?? null;
+        }
+
+        if (! is_string($country) || trim($country) === '') {
+            return null;
+        }
+
+        $trimmed = strtoupper(trim($country));
+
+        if ($trimmed === 'DEUTSCHLAND' || $trimmed === 'GERMANY') {
+            return 'DE';
+        }
+
+        return $trimmed;
+    }
+
+    private function nonEmptyString(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+
+        return $trimmed !== '' ? $trimmed : null;
     }
 
     private function baseUrl(): string

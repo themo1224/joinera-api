@@ -26,6 +26,7 @@ class ProfileFactory extends Factory
             'city' => fake()->randomElement(['Berlin', 'Hamburg', 'Munich', 'Cologne']),
             'province' => fake()->randomElement(['BE', 'HH', 'BY', 'NW']),
             'language' => fake()->randomElement(['de', 'en', 'de+en']),
+            'education' => null,
             'parse_status' => ParseStatus::Unparsed,
             'user_edited_fields' => null,
             'priorities' => Profile::DEFAULT_PRIORITIES,

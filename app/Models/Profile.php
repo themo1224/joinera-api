@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['user_id', 'industry', 'city', 'province', 'language', 'parse_status', 'user_edited_fields', 'priorities', 'approval', 'approved_by', 'approved_at'])]
+#[Fillable(['user_id', 'industry', 'city', 'province', 'language', 'education', 'parse_status', 'user_edited_fields', 'priorities', 'approval', 'approved_by', 'approved_at'])]
 class Profile extends Model
 {
     /** @use HasFactory<ProfileFactory> */

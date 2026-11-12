@@ -9,8 +9,10 @@ use App\Models\User;
 
 class BuildApplicantDirectoryItem
 {
-    public function __construct(private readonly ResolveIdentityReadiness $readiness)
-    {
+    public function __construct(
+        private readonly ResolveIdentityReadiness $readiness,
+        private readonly ResolveCandidateEligibility $eligibility,
+    ) {
     }
 
     /**
@@ -29,6 +31,8 @@ class BuildApplicantDirectoryItem
      *     approvedByEmail: string|null,
      *     approvedAt: string|null,
      *     readiness: string,
+     *     matchEligible: bool,
+     *     matchEligibilityReasons: list<string>,
      *     mailboxState: string,
      *     mailboxDomain: string|null,
      *     mailboxAddress: string|null,
@@ -48,6 +52,7 @@ class BuildApplicantDirectoryItem
         $profile = $user->profile;
         $mailbox = $user->mailboxIdentity;
         $readiness = $this->readiness->handle($user);
+        $eligibility = $this->eligibility->handle($user);
 
         $approval = ($profile?->approval ?? ApprovalStatus::Pending)->value;
         $approvedBy = $profile?->approvedBy;
@@ -67,6 +72,8 @@ class BuildApplicantDirectoryItem
             'approvedByEmail' => $approvedBy?->email,
             'approvedAt' => $profile?->approved_at?->toISOString(),
             'readiness' => $readiness['readiness'],
+            'matchEligible' => $eligibility['eligible'],
+            'matchEligibilityReasons' => $eligibility['reasons'],
             'mailboxState' => ($mailbox?->state ?? MailboxState::Pending)->value,
             'mailboxDomain' => $mailbox?->domain,
             'mailboxAddress' => $mailbox?->address,

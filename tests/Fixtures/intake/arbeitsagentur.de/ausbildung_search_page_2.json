@@ -1,0 +1,47 @@
+{
+  "joinera_fixture": "ausbildung_search",
+  "_embedded": {
+    "termine": [
+      {
+        "id": 19001,
+        "angebot": {
+          "id": 300001,
+          "titel": "Kaufmann/-frau im Einzelhandel"
+        },
+        "bildungsanbieter": {
+          "id": 5001,
+          "name": "Handel Süd GmbH",
+          "adresse": {
+            "ortStrasse": {
+              "plz": 80331,
+              "name": "München"
+            }
+          }
+        }
+      },
+      {
+        "id": 19002,
+        "angebot": {
+          "id": 300002,
+          "titel": "Elektroniker/in für Betriebstechnik"
+        },
+        "bildungsanbieter": {
+          "id": 5002,
+          "name": "Industrie Nord AG",
+          "adresse": {
+            "ortStrasse": {
+              "plz": 20095,
+              "name": "Hamburg"
+            }
+          }
+        }
+      }
+    ]
+  },
+  "page": {
+    "size": 20,
+    "totalElements": 2,
+    "totalPages": 2,
+    "number": 1
+  }
+}

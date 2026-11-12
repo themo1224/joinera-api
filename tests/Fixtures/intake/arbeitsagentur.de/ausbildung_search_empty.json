@@ -1,0 +1,12 @@
+{
+  "joinera_fixture": "ausbildung_search_empty",
+  "_embedded": {
+    "termine": []
+  },
+  "page": {
+    "size": 20,
+    "totalElements": 0,
+    "totalPages": 0,
+    "number": 2
+  }
+}

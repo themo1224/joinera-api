@@ -1,0 +1,40 @@
+{
+  "joinera_fixture": "jobs_search",
+  "stellenangebote": [
+    {
+      "hashId": "WBTAiM10b25rJgZqiLhVIHzAF9e0rnV_DXdsRZtlb54=",
+      "beruf": "Elektroinstallateur/in",
+      "refnr": "10000-1184867112-S",
+      "arbeitgeber": "Gröger & Oltermann Sicherheits- und Elektrotechnik GmbH",
+      "aktuelleVeroeffentlichungsdatum": "2021-07-25",
+      "arbeitsort": {
+        "plz": 90537,
+        "ort": "Berlin",
+        "land": "Deutschland"
+      }
+    },
+    {
+      "hashId": "VK2qoXBe0s-UAdH_qxLDRrZrY5iY8a1PJt3MjJCXsdo=",
+      "beruf": "Wissenschaftliche/r Mitarbeiter/in (Hochschule)",
+      "refnr": "10000-1183999289-S",
+      "arbeitgeber": "Kerstin Nickel Frisör",
+      "aktuelleVeroeffentlichungsdatum": "2021-07-25",
+      "arbeitsort": {
+        "plz": 13597,
+        "ort": "Berlin",
+        "land": "Deutschland"
+      }
+    },
+    {
+      "hashId": "broken-no-refnr",
+      "beruf": "Broken card without refnr",
+      "arbeitgeber": "Skip Me GmbH",
+      "arbeitsort": {
+        "ort": "Hamburg"
+      }
+    }
+  ],
+  "maxErgebnisse": "3",
+  "page": "1",
+  "size": "25"
+}

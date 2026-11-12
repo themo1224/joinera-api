@@ -1,0 +1,28 @@
+{
+  "joinera_fixture": "ausbildung_detail",
+  "id": 17885,
+  "angebot": {
+    "id": 255646,
+    "titel": "Physiotherapeut(in) und Bachelor of Science Physiotherapie (Ausbildungsbegleitender Studiengang)",
+    "inhalt": "Inhalte gemäß den geltenden Rechtsgrundlagen. Praxisnahe Ausbildung.",
+    "abschlussart": "Staatliche Prüfung und Bachelorprüfung",
+    "abschlussbezeichnung": "Physiotherapeut(in) und Bachelor of Science - Physiotherapie",
+    "zugang": "Alter Mindestalter: 17 Jahre. Mittlerer Schulabschluss empfohlen."
+  },
+  "bildungsanbieter": {
+    "id": 3264,
+    "name": "Musteranbieter",
+    "homepage": "www.anbieterhomepage.de",
+    "adresse": {
+      "strasse": "Ludwig-Guttmann-Str. 13",
+      "ortStrasse": {
+        "plz": 67071,
+        "name": "Ludwigshafen am Rhein"
+      },
+      "land": {
+        "name": "Rheinland-Pfalz",
+        "laenderCode": "D"
+      }
+    }
+  }
+}

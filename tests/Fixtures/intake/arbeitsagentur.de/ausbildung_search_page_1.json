@@ -1,0 +1,60 @@
+{
+  "joinera_fixture": "ausbildung_search",
+  "_embedded": {
+    "termine": [
+      {
+        "id": 17885,
+        "angebot": {
+          "id": 255646,
+          "titel": "Physiotherapeut(in) und Bachelor of Science Physiotherapie",
+          "inhalt": "Inhalte gemäß den geltenden Rechtsgrundlagen",
+          "abschlussbezeichnung": "Physiotherapeut(in)"
+        },
+        "bildungsanbieter": {
+          "id": 3264,
+          "name": "Musteranbieter",
+          "adresse": {
+            "strasse": "Ludwig-Guttmann-Str. 13",
+            "ortStrasse": {
+              "plz": 67071,
+              "name": "Ludwigshafen am Rhein"
+            }
+          }
+        }
+      },
+      {
+        "id": 17886,
+        "angebot": {
+          "id": 255647,
+          "titel": "Fachinformatiker/in für Anwendungsentwicklung",
+          "inhalt": "Programmierung und Softwareentwicklung"
+        },
+        "bildungsanbieter": {
+          "id": 4001,
+          "name": "Tech Ausbildung Berlin",
+          "adresse": {
+            "ortStrasse": {
+              "plz": 10115,
+              "name": "Berlin"
+            }
+          }
+        }
+      },
+      {
+        "id": null,
+        "angebot": {
+          "titel": "Broken termin without id"
+        },
+        "bildungsanbieter": {
+          "name": "Skip Me"
+        }
+      }
+    ]
+  },
+  "page": {
+    "size": 20,
+    "totalElements": 3,
+    "totalPages": 2,
+    "number": 0
+  }
+}

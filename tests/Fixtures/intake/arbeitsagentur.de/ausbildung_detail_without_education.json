@@ -1,0 +1,19 @@
+{
+  "joinera_fixture": "ausbildung_detail",
+  "id": 17886,
+  "angebot": {
+    "id": 255647,
+    "titel": "Fachinformatiker/in für Anwendungsentwicklung",
+    "inhalt": "Programmierung und Softwareentwicklung ohne Schulabschlussangabe."
+  },
+  "bildungsanbieter": {
+    "id": 4001,
+    "name": "Tech Ausbildung Berlin",
+    "adresse": {
+      "ortStrasse": {
+        "plz": 10115,
+        "name": "Berlin"
+      }
+    }
+  }
+}

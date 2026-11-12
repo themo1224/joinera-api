@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Contracts\ArbeitsagenturDeHttpClient;
 use App\Contracts\AusbildungDeHttpClient;
 use App\Contracts\AzubiyoHttpClient;
 use App\Contracts\CvParser;
@@ -9,6 +10,9 @@ use App\Contracts\DomainRegistrar;
 use App\Contracts\MailboxInboundSync;
 use App\Contracts\MailboxOutboundMailer;
 use App\Contracts\MailboxProvider;
+use App\Services\ArbeitsagenturDe\ArbeitsagenturDeIntakeAdapter;
+use App\Services\ArbeitsagenturDe\FakeArbeitsagenturDeHttpClient;
+use App\Services\ArbeitsagenturDe\LaravelArbeitsagenturDeHttpClient;
 use App\Services\AusbildungDe\AusbildungDeIntakeAdapter;
 use App\Services\AusbildungDe\FakeAusbildungDeHttpClient;
 use App\Services\AusbildungDe\LaravelAusbildungDeHttpClient;
@@ -76,6 +80,14 @@ class AppServiceProvider extends ServiceProvider
             return $app->make(LaravelAzubiyoHttpClient::class);
         });
 
+        $this->app->bind(ArbeitsagenturDeHttpClient::class, function ($app) {
+            if ($this->useFakeArbeitsagenturDeHttp()) {
+                return new FakeArbeitsagenturDeHttpClient;
+            }
+
+            return $app->make(LaravelArbeitsagenturDeHttpClient::class);
+        });
+
         $this->app->singleton(SiteIntakeAdapterRegistry::class, function ($app) {
             $registry = new SiteIntakeAdapterRegistry;
             $registry->register(
@@ -85,6 +97,10 @@ class AppServiceProvider extends ServiceProvider
             $registry->register(
                 'azubiyo',
                 $app->make(AzubiyoIntakeAdapter::class),
+            );
+            $registry->register(
+                'arbeitsagentur.de',
+                $app->make(ArbeitsagenturDeIntakeAdapter::class),
             );
 
             return $registry;
@@ -120,6 +136,13 @@ class AppServiceProvider extends ServiceProvider
     private function useFakeAzubiyoHttp(): bool
     {
         $driver = config('joinera.sites.adapters.azubiyo.http');
+
+        return $driver === 'fake' || $this->app->environment('testing');
+    }
+
+    private function useFakeArbeitsagenturDeHttp(): bool
+    {
+        $driver = config('joinera.sites.adapters.arbeitsagentur_de.http');
 
         return $driver === 'fake' || $this->app->environment('testing');
     }

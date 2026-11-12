@@ -1,0 +1,32 @@
+{
+  "joinera_fixture": "jobs_search",
+  "stellenangebote": [
+    {
+      "hashId": "page2JobHashAAAA=",
+      "beruf": "Fachinformatiker/in Systemintegration",
+      "refnr": "10001-1002716922-S",
+      "arbeitgeber": "Beispiel IT GmbH",
+      "aktuelleVeroeffentlichungsdatum": "2021-08-01",
+      "arbeitsort": {
+        "plz": 80331,
+        "ort": "München",
+        "land": "Deutschland"
+      }
+    },
+    {
+      "hashId": "page2JobHashBBBB=",
+      "beruf": "Kaufmann/-frau für Büromanagement",
+      "refnr": "10002-2000000001-S",
+      "arbeitgeber": "Nord Soft AG",
+      "aktuelleVeroeffentlichungsdatum": "2021-08-02",
+      "arbeitsort": {
+        "plz": 20095,
+        "ort": "Hamburg",
+        "land": "Deutschland"
+      }
+    }
+  ],
+  "maxErgebnisse": "2",
+  "page": "2",
+  "size": "25"
+}

@@ -1,0 +1,26 @@
+{
+  "joinera_fixture": "jobs_detail",
+  "aktuelleVeroeffentlichungsdatum": "2021-07-25",
+  "angebotsart": "ARBEIT",
+  "arbeitgeber": "Gröger & Oltermann Sicherheits- und Elektrotechnik GmbH",
+  "branchengruppe": "IT, Computer, Telekommunikation",
+  "branche": "Elektrotechnik",
+  "arbeitsorte": [
+    {
+      "land": "Deutschland",
+      "region": "Berlin",
+      "plz": "90537",
+      "ort": "Berlin",
+      "strasse": "Altdorfer Straße"
+    }
+  ],
+  "titel": "Elektroinstallateur/in",
+  "stellenangebotsTitel": "Elektroinstallateur/in (m/w/d)",
+  "stellenbeschreibung": "Installation und Wartung elektrischer Anlagen.",
+  "stellenangebotsBeschreibung": "Installation und Wartung elektrischer Anlagen in Industrie und Gewerbe.",
+  "refnr": "10000-1184867112-S",
+  "referenznummer": "10000-1184867112-S",
+  "hashId": "WBTAiM10b25rJgZqiLhVIHzAF9e0rnV_DXdsRZtlb54=",
+  "ersteVeroeffentlichungsdatum": "2021-05-23",
+  "allianzpartnerUrl": "https://www.arbeitsagentur.de"
+}

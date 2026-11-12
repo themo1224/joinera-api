@@ -1,0 +1,26 @@
+{
+  "joinera_fixture": "jobs_detail_live_shape",
+  "stellenangebotsart": "ARBEIT",
+  "stellenangebotsTitel": "Medizinische Fachangestellte (MFA) (m/w/d)",
+  "stellenangebotsBeschreibung": "Ambulante Praxis sucht MFA in Vollzeit oder Teilzeit.",
+  "stellenlokationen": [
+    {
+      "adresse": {
+        "strasse": "Bahnhofstr.",
+        "hausnummer": "136",
+        "plz": "74321",
+        "ort": "Bietigheim-Bissingen",
+        "region": "BADEN_WUERTTEMBERG",
+        "land": "DEUTSCHLAND"
+      }
+    }
+  ],
+  "datumErsteVeroeffentlichung": "2026-11-12",
+  "veroeffentlichungszeitraum": {
+    "von": "2026-11-12"
+  },
+  "hauptberuf": "Medizinische/r Fachangestellte/r",
+  "firma": "Joseph Costigan",
+  "referenznummer": "10001-1004008455-S",
+  "allianzpartnerUrl": "http://www.arbeitsagentur.de"
+}

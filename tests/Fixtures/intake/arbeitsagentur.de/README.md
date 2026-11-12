@@ -6,6 +6,10 @@
 
 Trimmed JSON for PHPUnit Fake HTTP. Jobsuche + Ausbildungssuche public REST shapes. Do not scrape HTML. Do not use Candidate / SiteIdentity sessions.
 
+## Live schema drift (2026-11)
+
+Live Jobsuche v6 returns `ergebnisliste` (not `stellenangebote`), with `referenznummer` / `firma` / `stellenlokationen` and often **no** `hashId`. Live Ausbildung nests `bildungsanbieter` under `angebot` (city may also sit on termin `adresse`). Adapter accepts both legacy fixtures below and `*_live_shape.json` captures.
+
 ## Endpoints
 
 | Channel | Purpose | Example URL | Fixture |

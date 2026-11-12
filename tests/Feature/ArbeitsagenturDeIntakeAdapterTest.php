@@ -263,6 +263,80 @@ class ArbeitsagenturDeIntakeAdapterTest extends TestCase
         $this->assertNotNull($first['listing']->description);
     }
 
+    public function test_parse_list_from_live_shape_fixtures_yields_title_company_city_url(): void
+    {
+        config(['joinera.sites.adapters.arbeitsagentur_de.max_pages' => 1]);
+
+        $fake = (new FakeArbeitsagenturDeHttpClient)->withPathOverrides([
+            '/pc/v6/jobs?' => 'jobs_search_live_shape.json',
+            '/pc/v1/ausbildungsangebot?' => 'ausbildung_search_live_shape.json',
+        ]);
+        $adapter = new ArbeitsagenturDeIntakeAdapter($fake);
+
+        $items = $adapter->parseList($adapter->search());
+
+        $this->assertCount(2, $items);
+
+        $job = collect($items)->firstWhere('kind', 'job');
+        $ausbildung = collect($items)->firstWhere('kind', 'ausbildung');
+
+        $this->assertNotNull($job);
+        $this->assertSame('10001-1004008455-S', $job['external_id']);
+        $this->assertStringContainsString('Medizinische Fachangestellte', $job['title'] ?? '');
+        $this->assertSame('Joseph Costigan', $job['company']);
+        $this->assertSame('74321 Bietigheim-Bissingen', $job['city']);
+        $this->assertSame(
+            'https://www.arbeitsagentur.de/jobsuche/stelle/10001-1004008455-S',
+            $job['url'],
+        );
+
+        $this->assertNotNull($ausbildung);
+        $this->assertSame('291681994', $ausbildung['external_id']);
+        $this->assertStringContainsString('Florist', $ausbildung['title'] ?? '');
+        $this->assertSame('Heinrich-Haus gGmbH Berufsbildungswerk', $ausbildung['company']);
+        $this->assertSame('56566 Neuwied', $ausbildung['city']);
+        $this->assertStringContainsString('/ausbildungssuche/ausbildungsangebot/291681994', $ausbildung['url']);
+    }
+
+    public function test_live_shape_parse_detail_then_upsert_creates_job_and_ausbildung(): void
+    {
+        Event::fake();
+        config(['joinera.sites.adapters.arbeitsagentur_de.max_pages' => 1]);
+
+        $fake = (new FakeArbeitsagenturDeHttpClient)->withPathOverrides([
+            '/pc/v6/jobs?' => 'jobs_search_live_shape.json',
+            '/pc/v1/ausbildungsangebot?' => 'ausbildung_search_live_shape.json',
+            '/jobdetails/' => 'jobs_detail_live_shape.json',
+            '/ausbildungsangebot/291681994' => 'ausbildung_detail_live_shape.json',
+        ]);
+        $adapter = new ArbeitsagenturDeIntakeAdapter($fake);
+        $upsert = $this->app->make(UpsertListing::class);
+
+        $items = $adapter->parseList($adapter->search());
+        $this->assertCount(2, $items);
+
+        foreach ($items as $item) {
+            $detail = $adapter->parseDetail($item);
+            $result = $upsert->handle('arbeitsagentur.de', $detail);
+
+            $this->assertNotNull($result, $item['external_id']);
+            $this->assertTrue($result['created'], $item['external_id']);
+            $this->assertSame('arbeitsagentur.de', $result['listing']->source);
+            $this->assertNotSame('', $result['listing']->title);
+            $this->assertNotSame('', $result['listing']->company);
+            $this->assertNotSame('', $result['listing']->city);
+        }
+
+        $this->assertSame(2, Listing::query()->where('source', 'arbeitsagentur.de')->count());
+        $this->assertSame(1, Listing::query()->where('source', 'arbeitsagentur.de')->where('kind', 'job')->count());
+        $this->assertSame(1, Listing::query()->where('source', 'arbeitsagentur.de')->where('kind', 'ausbildung')->count());
+
+        $job = Listing::query()->where('source', 'arbeitsagentur.de')->where('kind', 'job')->first();
+        $this->assertNotNull($job);
+        $this->assertSame('10001-1004008455-S', $job->external_id);
+        $this->assertSame('2026-11-12', $job->posted_at?->toDateString());
+    }
+
     public function test_registry_registers_arbeitsagentur_de_with_peer_boards(): void
     {
         $registry = $this->app->make(SiteIntakeAdapterRegistry::class);

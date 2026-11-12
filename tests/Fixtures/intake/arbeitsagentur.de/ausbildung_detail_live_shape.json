@@ -1,0 +1,30 @@
+{
+  "joinera_fixture": "ausbildung_detail_live_shape",
+  "id": 291681994,
+  "angebot": {
+    "id": 255646,
+    "titel": "Florist (m/w/d) (Ausbildung)",
+    "inhalt": "Praxisnahe Ausbildung im Floristenhandwerk.",
+    "abschlussbezeichnung": "Florist/in",
+    "zugang": "Alter Mindestalter: 16 Jahre. Schulabschluss empfohlen.",
+    "bildungsanbieter": {
+      "id": 595,
+      "name": "Heinrich-Haus gGmbH Berufsbildungswerk",
+      "homepage": "https://bbw-neuwied.de",
+      "adresse": {
+        "strasse": "Stiftsstr. 1",
+        "ortStrasse": {
+          "plz": "56566",
+          "name": "Neuwied"
+        }
+      }
+    }
+  },
+  "adresse": {
+    "strasse": "Stiftsstr. 1",
+    "ortStrasse": {
+      "plz": "56566",
+      "name": "Neuwied"
+    }
+  }
+}

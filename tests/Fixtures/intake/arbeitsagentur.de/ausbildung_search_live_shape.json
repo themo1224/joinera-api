@@ -1,0 +1,50 @@
+{
+  "joinera_fixture": "ausbildung_search_live_shape",
+  "_embedded": {
+    "termine": [
+      {
+        "id": 291681994,
+        "angebot": {
+          "id": 255646,
+          "titel": "Florist (m/w/d) (Ausbildung)",
+          "inhalt": "Praxisnahe Ausbildung im Floristenhandwerk.",
+          "abschlussbezeichnung": "Florist/in",
+          "bildungsanbieter": {
+            "id": 595,
+            "name": "Heinrich-Haus gGmbH Berufsbildungswerk",
+            "homepage": "https://bbw-neuwied.de",
+            "adresse": {
+              "strasse": "Stiftsstr. 1",
+              "ortStrasse": {
+                "plz": "56566",
+                "name": "Neuwied"
+              }
+            }
+          }
+        },
+        "adresse": {
+          "strasse": "Stiftsstr. 1",
+          "ortStrasse": {
+            "plz": "56566",
+            "name": "Neuwied"
+          }
+        }
+      },
+      {
+        "id": null,
+        "angebot": {
+          "titel": "Broken termin without id",
+          "bildungsanbieter": {
+            "name": "Skip Me"
+          }
+        }
+      }
+    ]
+  },
+  "page": {
+    "size": 20,
+    "totalElements": 2,
+    "totalPages": 1,
+    "number": 0
+  }
+}

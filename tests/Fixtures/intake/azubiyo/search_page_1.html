@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Azubiyo Stellenmarkt — Joinera fixture (trimmed)</title>
+</head>
+<!-- TRIMMED FIXTURE: card markup aligned to live SSR (job-offer-teaser / stellenanzeigen). -->
+<body data-joinera-fixture="search">
+  <h1>Stellenangebote</h1>
+
+  <!-- Valid card 1 -->
+  <div class="job-search-job-offer-teaser">
+    <div class="job-offer-teaser card card-clickable">
+      <a href="/stellenanzeigen/ausbildung-zum-kaufmann-fuer-bueromanagement-m-w-d_expert_66195a74/" class="text-decoration-none">
+        <span class="h3 mb-0 fs-6 fw-bold lh-lg">Ausbildung zum Kaufmann für Büromanagement (m/w/d)</span>
+        <span class="mt-2 py-1 text-secondary font-size-14 fw-normal lh-lg">expert SE</span>
+        <ul class="list-unstyled d-flex flex-column">
+          <li class="mt-2 d-flex align-items-center">
+            <span class="ps-2 text-placeholder font-size-12 fw-normal">01.08.2027</span>
+          </li>
+          <li class="mt-2 d-flex align-items-center">
+            <span class="ps-2 text-placeholder font-size-12 fw-normal">21684 Stade</span>
+          </li>
+        </ul>
+      </a>
+    </div>
+  </div>
+
+  <!-- Valid card 2 -->
+  <div class="job-search-job-offer-teaser">
+    <div class="job-offer-teaser card card-clickable">
+      <a href="/stellenanzeigen/auszubildende-fachinformatikerin-fachinformatiker-_bundeskriminalamt_bga9a4a4/" class="text-decoration-none">
+        <span class="h3 mb-0 fs-6 fw-bold lh-lg">Auszubildende Fachinformatikerin/Fachinformatiker für Systemintegration (w/m/d)</span>
+        <span class="mt-2 py-1 text-secondary font-size-14 fw-normal lh-lg">Bundeskriminalamt</span>
+        <ul class="list-unstyled d-flex flex-column">
+          <li class="mt-2 d-flex align-items-center">
+            <span class="ps-2 text-placeholder font-size-12 fw-normal">01.08.2026</span>
+          </li>
+          <li class="mt-2 d-flex align-items-center">
+            <span class="ps-2 text-placeholder font-size-12 fw-normal">12435 Berlin</span>
+          </li>
+        </ul>
+      </a>
+    </div>
+  </div>
+
+  <!-- Broken card: /stellenanzeigen/ without trailing _{id} — must be skipped -->
+  <div class="job-search-job-offer-teaser">
+    <div class="job-offer-teaser card card-clickable">
+      <a href="/stellenanzeigen/broken-listing-without-id/" class="text-decoration-none">
+        <span class="h3 mb-0 fs-6 fw-bold lh-lg">Broken listing without trailing id</span>
+        <span class="mt-2 py-1 text-secondary font-size-14 fw-normal lh-lg">Broken GmbH</span>
+        <ul class="list-unstyled d-flex flex-column">
+          <li class="mt-2 d-flex align-items-center">
+            <span class="ps-2 text-placeholder font-size-12 fw-normal">10115 Berlin</span>
+          </li>
+        </ul>
+      </a>
+    </div>
+  </div>
+</body>
+</html>

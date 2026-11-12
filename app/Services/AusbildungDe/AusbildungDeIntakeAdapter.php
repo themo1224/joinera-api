@@ -19,6 +19,10 @@ use RuntimeException;
  *
  * Detail selectors: application/ld+json JobPosting; Schulabschluss fact box;
  * a[data-testid="application-button"] for apply_url.
+ *
+ * Pagination: provisional ?page=N (Fake honors it; live SSR may ignore and
+ * return duplicates — search stops on empty page or zero new external_ids).
+ * Hard cap: joinera.sites.adapters.ausbildung_de.max_pages (default 5).
  */
 class AusbildungDeIntakeAdapter implements SiteIntakeAdapter
 {
@@ -33,14 +37,48 @@ class AusbildungDeIntakeAdapter implements SiteIntakeAdapter
      */
     public function search(): array
     {
-        $url = (string) config(
-            'joinera.sites.adapters.ausbildung_de.search_url',
-            'https://www.ausbildung.de/suche/',
-        );
+        $maxPages = max(1, (int) config('joinera.sites.adapters.ausbildung_de.max_pages', 5));
+        $seenIds = [];
+        $pages = [];
 
-        $body = $this->http->get($url);
+        for ($page = 1; $page <= $maxPages; $page++) {
+            $url = $this->searchPageUrl($page);
+            $body = $this->http->get($url);
+            $pageItems = $this->parseBodyItems($body);
 
-        return ['body' => $body];
+            if ($pageItems === []) {
+                break;
+            }
+
+            $newCount = 0;
+
+            foreach ($pageItems as $item) {
+                $id = (string) ($item['external_id'] ?? '');
+
+                if ($id === '' || isset($seenIds[$id])) {
+                    continue;
+                }
+
+                $seenIds[$id] = true;
+                $newCount++;
+            }
+
+            $pages[] = [
+                'page' => $page,
+                'url' => $url,
+                'body' => $body,
+            ];
+
+            if ($newCount === 0) {
+                break;
+            }
+        }
+
+        return [
+            'pages' => $pages,
+            // Backward-compatible alias for page 1 body.
+            'body' => $pages[0]['body'] ?? '',
+        ];
     }
 
     /**
@@ -49,9 +87,43 @@ class AusbildungDeIntakeAdapter implements SiteIntakeAdapter
      */
     public function parseList(array $searchResult): array
     {
-        $body = $searchResult['body'] ?? '';
+        $bodies = [];
 
-        if (! is_string($body) || $body === '') {
+        if (isset($searchResult['pages']) && is_array($searchResult['pages'])) {
+            foreach ($searchResult['pages'] as $page) {
+                if (is_array($page) && is_string($page['body'] ?? null)) {
+                    $bodies[] = $page['body'];
+                }
+            }
+        } elseif (is_string($searchResult['body'] ?? null) && $searchResult['body'] !== '') {
+            $bodies[] = $searchResult['body'];
+        }
+
+        $items = [];
+        $seenIds = [];
+
+        foreach ($bodies as $body) {
+            foreach ($this->parseBodyItems($body) as $item) {
+                $id = (string) ($item['external_id'] ?? '');
+
+                if ($id === '' || isset($seenIds[$id])) {
+                    continue;
+                }
+
+                $seenIds[$id] = true;
+                $items[] = $item;
+            }
+        }
+
+        return $items;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function parseBodyItems(string $body): array
+    {
+        if ($body === '') {
             return [];
         }
 
@@ -80,6 +152,34 @@ class AusbildungDeIntakeAdapter implements SiteIntakeAdapter
         }
 
         return $items;
+    }
+
+    private function searchPageUrl(int $page): string
+    {
+        $base = (string) config(
+            'joinera.sites.adapters.ausbildung_de.search_url',
+            'https://www.ausbildung.de/suche/',
+        );
+
+        if ($page <= 1) {
+            return $base;
+        }
+
+        $parts = parse_url($base);
+        $scheme = $parts['scheme'] ?? 'https';
+        $host = $parts['host'] ?? 'www.ausbildung.de';
+        $path = $parts['path'] ?? '/suche/';
+        $query = [];
+
+        if (isset($parts['query'])) {
+            parse_str($parts['query'], $query);
+        }
+
+        $query['page'] = $page;
+
+        $port = isset($parts['port']) ? ':'.$parts['port'] : '';
+
+        return $scheme.'://'.$host.$port.$path.'?'.http_build_query($query);
     }
 
     /**

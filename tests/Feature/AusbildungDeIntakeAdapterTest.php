@@ -2,6 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Enums\IntakeRunSiteStatus;
+use App\Models\IntakeRun;
+use App\Models\IntakeRunSite;
 use App\Models\Listing;
 use App\Services\AusbildungDe\AusbildungDeIntakeAdapter;
 use App\Services\AusbildungDe\FakeAusbildungDeHttpClient;
@@ -35,24 +38,27 @@ class AusbildungDeIntakeAdapterTest extends TestCase
 
     public function test_adapter_is_instantiable_and_search_uses_fake_fixture(): void
     {
+        config(['joinera.sites.adapters.ausbildung_de.max_pages' => 1]);
+
         $fake = new FakeAusbildungDeHttpClient;
         $adapter = new AusbildungDeIntakeAdapter($fake);
 
         $result = $adapter->search();
 
         $this->assertArrayHasKey('body', $result);
+        $this->assertArrayHasKey('pages', $result);
         $this->assertStringContainsString('data-joinera-fixture="search"', $result['body']);
+        $this->assertCount(1, $result['pages']);
     }
 
-    public function test_registry_can_register_ausbildung_de_adapter(): void
+    public function test_registry_registers_ausbildung_de_adapter_by_default(): void
     {
-        $fake = new FakeAusbildungDeHttpClient;
-        $adapter = new AusbildungDeIntakeAdapter($fake);
         $registry = $this->app->make(SiteIntakeAdapterRegistry::class);
 
-        $registry->register('ausbildung.de', $adapter);
-
-        $this->assertSame($adapter, $registry->get('ausbildung.de'));
+        $this->assertInstanceOf(
+            AusbildungDeIntakeAdapter::class,
+            $registry->get('ausbildung.de'),
+        );
     }
 
     /**
@@ -61,6 +67,8 @@ class AusbildungDeIntakeAdapterTest extends TestCase
      */
     public function test_parse_list_from_fixture_yields_stable_external_ids_and_absolute_urls(): void
     {
+        config(['joinera.sites.adapters.ausbildung_de.max_pages' => 1]);
+
         $fake = new FakeAusbildungDeHttpClient;
         $adapter = new AusbildungDeIntakeAdapter($fake);
 
@@ -94,11 +102,54 @@ class AusbildungDeIntakeAdapterTest extends TestCase
         $this->assertSame('08209 Auerbach/Vogtl.', $items[0]['city']);
     }
 
+    public function test_parse_list_unions_unique_external_ids_across_pages(): void
+    {
+        config(['joinera.sites.adapters.ausbildung_de.max_pages' => 5]);
+
+        $fake = new FakeAusbildungDeHttpClient;
+        $adapter = new AusbildungDeIntakeAdapter($fake);
+
+        $search = $adapter->search();
+        $items = $adapter->parseList($search);
+
+        // page1: 3 valid, page2: 2 valid, page3 empty → stop. Union = 5.
+        $this->assertCount(5, $items);
+        $this->assertCount(2, $search['pages']);
+
+        $externalIds = array_column($items, 'external_id');
+        $this->assertSame($externalIds, array_values(array_unique($externalIds)));
+        $this->assertContains('fb079a87-e145-457c-9bda-8f471d8541d6', $externalIds);
+        $this->assertContains('7b2c4f47-ca3e-491e-9f49-6d6f2e2f1c48', $externalIds);
+        $this->assertContains('07393851-f241-458b-9817-21fa3436c6b0', $externalIds);
+    }
+
+    public function test_search_stops_early_when_later_pages_add_no_new_ids(): void
+    {
+        config(['joinera.sites.adapters.ausbildung_de.max_pages' => 5]);
+
+        // Force page>=2 to replay page 1 so dedupe finds zero new ids.
+        $fake = (new FakeAusbildungDeHttpClient)->withPathOverrides([
+            'page=2' => 'search_page_1.html',
+            'page=3' => 'search_page_1.html',
+            'page=4' => 'search_page_1.html',
+            'page=5' => 'search_page_1.html',
+        ]);
+        $adapter = new AusbildungDeIntakeAdapter($fake);
+
+        $search = $adapter->search();
+
+        $this->assertCount(2, $search['pages']);
+        $this->assertCount(2, $fake->requestedUrls);
+        $this->assertCount(3, $adapter->parseList($search));
+    }
+
     /**
      * Detail: JobPosting JSON-LD + a[data-testid="application-button"]; external_id stays list UUID.
      */
     public function test_parse_detail_from_fixture_returns_upsert_payload(): void
     {
+        config(['joinera.sites.adapters.ausbildung_de.max_pages' => 1]);
+
         $fake = new FakeAusbildungDeHttpClient;
         $adapter = new AusbildungDeIntakeAdapter($fake);
 
@@ -150,6 +201,7 @@ class AusbildungDeIntakeAdapterTest extends TestCase
     public function test_parse_detail_then_upsert_creates_once_and_dedupes_by_external_id(): void
     {
         Event::fake();
+        config(['joinera.sites.adapters.ausbildung_de.max_pages' => 1]);
 
         $fake = new FakeAusbildungDeHttpClient;
         $adapter = new AusbildungDeIntakeAdapter($fake);
@@ -172,5 +224,27 @@ class AusbildungDeIntakeAdapterTest extends TestCase
         $this->assertNotNull($first['listing']->apply_url);
         $this->assertNotNull($first['listing']->description);
         $this->assertNotNull($first['listing']->posted_at);
+    }
+
+    public function test_intake_run_with_ausbildung_de_creates_listings_via_fake_http(): void
+    {
+        Event::fake();
+
+        config([
+            'joinera.sites.v1' => ['ausbildung.de'],
+            'joinera.sites.adapters.ausbildung_de.max_pages' => 1,
+        ]);
+
+        $this->artisan('intake:run')->assertSuccessful();
+
+        $site = IntakeRunSite::query()->where('site', 'ausbildung.de')->first();
+        $this->assertNotNull($site);
+        $this->assertSame(IntakeRunSiteStatus::Ok, $site->status);
+        $this->assertGreaterThan(0, $site->listings_created);
+        $this->assertSame(
+            $site->listings_created,
+            Listing::query()->where('source', 'ausbildung.de')->count(),
+        );
+        $this->assertNotNull(IntakeRun::query()->first()?->finished_at);
     }
 }

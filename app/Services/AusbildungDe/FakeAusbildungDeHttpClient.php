@@ -9,8 +9,11 @@ class FakeAusbildungDeHttpClient implements AusbildungDeHttpClient
 {
     private string $fixturesRoot;
 
-    /** @var array<string, string> path substring => fixture filename */
+    /** @var array<string, string> path/query substring => fixture filename */
     private array $pathOverrides;
+
+    /** @var list<string> */
+    public array $requestedUrls = [];
 
     /**
      * @param  array<string, string>  $pathOverrides
@@ -29,6 +32,7 @@ class FakeAusbildungDeHttpClient implements AusbildungDeHttpClient
     {
         $clone = clone $this;
         $clone->pathOverrides = $pathOverrides;
+        $clone->requestedUrls = [];
 
         return $clone;
     }
@@ -38,8 +42,11 @@ class FakeAusbildungDeHttpClient implements AusbildungDeHttpClient
      */
     public function get(string $url, array $options = []): string
     {
+        $this->requestedUrls[] = $url;
+
         $path = parse_url($url, PHP_URL_PATH) ?: '/';
-        $fixture = $this->resolveFixture($path);
+        $query = parse_url($url, PHP_URL_QUERY) ?: '';
+        $fixture = $this->resolveFixture($path, $query);
 
         $file = $this->fixturesRoot.DIRECTORY_SEPARATOR.$fixture;
 
@@ -56,15 +63,28 @@ class FakeAusbildungDeHttpClient implements AusbildungDeHttpClient
         return $body;
     }
 
-    private function resolveFixture(string $path): string
+    private function resolveFixture(string $path, string $query): string
     {
+        $haystack = $path.($query !== '' ? '?'.$query : '');
+
         foreach ($this->pathOverrides as $needle => $fixture) {
-            if ($needle !== '' && str_contains($path, $needle)) {
+            if ($needle !== '' && str_contains($haystack, $needle)) {
                 return $fixture;
             }
         }
 
         if (str_contains($path, '/suche') || str_ends_with($path, '/search')) {
+            parse_str($query, $params);
+            $page = isset($params['page']) ? (int) $params['page'] : 1;
+
+            if ($page >= 3) {
+                return 'search_page_empty.html';
+            }
+
+            if ($page >= 2) {
+                return 'search_page_2.html';
+            }
+
             return 'search_page_1.html';
         }
 

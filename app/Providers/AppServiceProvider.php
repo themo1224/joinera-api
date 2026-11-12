@@ -3,12 +3,17 @@
 namespace App\Providers;
 
 use App\Contracts\AusbildungDeHttpClient;
+use App\Contracts\AzubiyoHttpClient;
 use App\Contracts\CvParser;
 use App\Contracts\DomainRegistrar;
 use App\Contracts\MailboxInboundSync;
 use App\Contracts\MailboxOutboundMailer;
 use App\Contracts\MailboxProvider;
+use App\Services\AusbildungDe\AusbildungDeIntakeAdapter;
+use App\Services\AusbildungDe\FakeAusbildungDeHttpClient;
 use App\Services\AusbildungDe\LaravelAusbildungDeHttpClient;
+use App\Services\Azubiyo\FakeAzubiyoHttpClient;
+use App\Services\Azubiyo\LaravelAzubiyoHttpClient;
 use App\Services\FakeMailboxInboundSync;
 use App\Services\FakeMailboxOutboundMailer;
 use App\Services\FixtureCvParser;
@@ -54,10 +59,32 @@ class AppServiceProvider extends ServiceProvider
             return $app->make(GmxSmtpMailer::class);
         });
 
-        $this->app->singleton(SiteIntakeAdapterRegistry::class);
+        $this->app->bind(AusbildungDeHttpClient::class, function ($app) {
+            if ($this->useFakeAusbildungDeHttp()) {
+                return new FakeAusbildungDeHttpClient;
+            }
 
-        // Ausbildung.de HTTP only — adapter is not registered in sites.v1 yet.
-        $this->app->bind(AusbildungDeHttpClient::class, LaravelAusbildungDeHttpClient::class);
+            return $app->make(LaravelAusbildungDeHttpClient::class);
+        });
+
+        $this->app->bind(AzubiyoHttpClient::class, function ($app) {
+            if ($this->useFakeAzubiyoHttp()) {
+                return new FakeAzubiyoHttpClient;
+            }
+
+            return $app->make(LaravelAzubiyoHttpClient::class);
+        });
+
+        $this->app->singleton(SiteIntakeAdapterRegistry::class, function ($app) {
+            $registry = new SiteIntakeAdapterRegistry;
+            $registry->register(
+                'ausbildung.de',
+                $app->make(AusbildungDeIntakeAdapter::class),
+            );
+            // azubiyo stays out of the default registry until Plan 3D enablement.
+
+            return $registry;
+        });
     }
 
     /**
@@ -75,6 +102,20 @@ class AppServiceProvider extends ServiceProvider
     private function useFakeMailboxPorts(): bool
     {
         $driver = config('joinera.mailbox.driver');
+
+        return $driver === 'fake' || $this->app->environment('testing');
+    }
+
+    private function useFakeAusbildungDeHttp(): bool
+    {
+        $driver = config('joinera.sites.adapters.ausbildung_de.http');
+
+        return $driver === 'fake' || $this->app->environment('testing');
+    }
+
+    private function useFakeAzubiyoHttp(): bool
+    {
+        $driver = config('joinera.sites.adapters.azubiyo.http');
 
         return $driver === 'fake' || $this->app->environment('testing');
     }

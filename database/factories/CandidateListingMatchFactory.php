@@ -75,4 +75,14 @@ class CandidateListingMatchFactory extends Factory
             'force_queued_at' => now(),
         ]);
     }
+
+    /**
+     * @param  array<string, mixed>  $signals
+     */
+    public function withSoftSignals(array $signals): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'soft_signals' => $signals,
+        ]);
+    }
 }

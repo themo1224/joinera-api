@@ -5,16 +5,25 @@ namespace Tests\Feature;
 use App\Enums\ApplicationStatus;
 use App\Enums\MatchHardSkipReason;
 use App\Enums\MatchStatus;
+use App\Jobs\PrepareApplicationDocsJob;
 use App\Models\Application;
 use App\Models\CandidateListingMatch;
 use App\Models\Listing;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class StaffForceQueueMatchTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Queue::fake([PrepareApplicationDocsJob::class]);
+    }
 
     public function test_staff_force_queues_skipped_match_and_creates_queued_application(): void
     {

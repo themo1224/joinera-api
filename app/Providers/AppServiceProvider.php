@@ -11,12 +11,15 @@ use App\Contracts\LlmClient;
 use App\Contracts\MailboxInboundSync;
 use App\Contracts\MailboxOutboundMailer;
 use App\Contracts\MailboxProvider;
+use App\Contracts\PdfRenderer;
 use App\Events\CandidateMatchRecomputeRequested;
 use App\Events\ListingCreated;
 use App\Events\ProfilePrioritiesChanged;
 use App\Listeners\DispatchMatchListingOnListingCreated;
 use App\Listeners\DispatchRematchOnCandidateMatchRecomputeRequested;
 use App\Listeners\DispatchRematchOnProfilePrioritiesChanged;
+use App\Services\Ai\FakeLlmClient;
+use App\Services\Ai\OpenRouterLlmClient;
 use App\Services\ArbeitsagenturDe\ArbeitsagenturDeIntakeAdapter;
 use App\Services\ArbeitsagenturDe\FakeArbeitsagenturDeHttpClient;
 use App\Services\ArbeitsagenturDe\LaravelArbeitsagenturDeHttpClient;
@@ -26,8 +29,8 @@ use App\Services\AusbildungDe\LaravelAusbildungDeHttpClient;
 use App\Services\Azubiyo\AzubiyoIntakeAdapter;
 use App\Services\Azubiyo\FakeAzubiyoHttpClient;
 use App\Services\Azubiyo\LaravelAzubiyoHttpClient;
-use App\Services\Ai\FakeLlmClient;
-use App\Services\Ai\OpenRouterLlmClient;
+use App\Services\Docs\DompdfPdfRenderer;
+use App\Services\Docs\FakePdfRenderer;
 use App\Services\FakeMailboxInboundSync;
 use App\Services\FakeMailboxOutboundMailer;
 use App\Services\FixtureCvParser;
@@ -57,6 +60,14 @@ class AppServiceProvider extends ServiceProvider
             }
 
             return $app->make(OpenRouterLlmClient::class);
+        });
+
+        $this->app->bind(PdfRenderer::class, function ($app) {
+            if ($this->useFakePdfRenderer()) {
+                return $app->make(FakePdfRenderer::class);
+            }
+
+            return $app->make(DompdfPdfRenderer::class);
         });
 
         // Legacy domain provision ports — no longer used by apply-mail path.
@@ -174,5 +185,10 @@ class AppServiceProvider extends ServiceProvider
         $driver = config('joinera.ai.driver');
 
         return $driver === 'fake' || $this->app->environment('testing');
+    }
+
+    private function useFakePdfRenderer(): bool
+    {
+        return $this->app->environment('testing');
     }
 }

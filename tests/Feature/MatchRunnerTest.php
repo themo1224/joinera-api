@@ -10,6 +10,7 @@ use App\Events\CandidateMatchRecomputeRequested;
 use App\Events\ListingCreated;
 use App\Events\ProfilePrioritiesChanged;
 use App\Jobs\MatchListingJob;
+use App\Jobs\PrepareApplicationDocsJob;
 use App\Jobs\RematchCandidateJob;
 use App\Models\CandidateListingMatch;
 use App\Models\CvAsset;
@@ -39,6 +40,8 @@ class MatchRunnerTest extends TestCase
             'joinera.sites.v1' => ['stepstone'],
             'joinera.queues.match' => 'match',
         ]);
+
+        Queue::fake([PrepareApplicationDocsJob::class]);
     }
 
     public function test_eligible_hard_pass_writes_queued_match(): void

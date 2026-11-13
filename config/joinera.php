@@ -78,13 +78,20 @@ return [
         'intake' => 'intake',
         'alerts' => 'alerts',
         'match' => env('JOINERA_QUEUE_MATCH', 'match'),
+        'docs' => env('JOINERA_QUEUE_DOCS', 'docs'),
     ],
     'apply' => [
         // Q17: Applications per Candidate per active window (not profile CVs).
         'cap' => max(1, (int) env('JOINERA_APPLY_CAP', 10)),
         'cap_window' => env('JOINERA_APPLY_CAP_WINDOW', 'daily'), // daily|weekly
     ],
-    // LLM port for later preparing_docs / cover+CV. Swap driver without rewriting jobs.
+    // P0-13 preparing_docs: cover (+ CV when category differs) via LlmClient + PdfRenderer.
+    'docs' => [
+        'disk' => env('JOINERA_DOCS_DISK', 'local'),
+        'regenerate_max_per_hour' => max(1, (int) env('JOINERA_DOCS_REGENERATE_MAX_PER_HOUR', 3)),
+        'listing_description_max_chars' => max(200, (int) env('JOINERA_DOCS_LISTING_DESCRIPTION_MAX_CHARS', 2000)),
+    ],
+    // LLM port for preparing_docs / cover+CV. Swap driver without rewriting jobs.
     'ai' => [
         // openrouter | fake — testing env always uses Fake in AppServiceProvider.
         'driver' => env('JOINERA_AI_DRIVER', 'openrouter'),

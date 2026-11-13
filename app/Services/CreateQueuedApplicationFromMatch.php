@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\ApplicationStatus;
 use App\Enums\MatchStatus;
 use App\Events\ApplicationStatusChanged;
+use App\Jobs\PrepareApplicationDocsJob;
 use App\Models\Application;
 use App\Models\CandidateListingMatch;
 use Illuminate\Database\QueryException;
@@ -41,6 +42,8 @@ class CreateQueuedApplicationFromMatch
                 $from,
                 ApplicationStatus::Queued->value,
             );
+
+            PrepareApplicationDocsJob::dispatch($application->id);
         }
 
         return $application->refresh();

@@ -8,6 +8,7 @@ use App\Enums\MailboxState;
 use App\Enums\MatchHardSkipReason;
 use App\Enums\MatchStatus;
 use App\Events\ApplicationStatusChanged;
+use App\Jobs\PrepareApplicationDocsJob;
 use App\Models\Application;
 use App\Models\CandidateListingMatch;
 use App\Models\CvAsset;
@@ -19,6 +20,7 @@ use App\Services\CreateQueuedApplicationFromMatch;
 use App\Services\UpsertCandidateListingMatch;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class CreateQueuedApplicationFromMatchTest extends TestCase
@@ -36,6 +38,38 @@ class CreateQueuedApplicationFromMatchTest extends TestCase
             'joinera.sites.v1' => ['stepstone'],
             'joinera.queues.match' => 'match',
         ]);
+
+        // P0-12 asserts stay on queued; docs prepare is covered in PrepareApplicationDocsTest.
+        Queue::fake([PrepareApplicationDocsJob::class]);
+    }
+
+    public function test_promoting_to_queued_dispatches_docs_job_once(): void
+    {
+        $staff = User::factory()->staff()->create();
+        $applicant = $this->createEligibleApplicant($staff);
+        $listing = $this->createHardPassListing();
+
+        $match = CandidateListingMatch::factory()
+            ->for($applicant)
+            ->for($listing)
+            ->queued()
+            ->create();
+
+        Application::factory()
+            ->forMatch($match)
+            ->matched()
+            ->create();
+
+        $application = app(CreateQueuedApplicationFromMatch::class)->handle($match);
+        $this->assertNotNull($application);
+
+        Queue::assertPushed(PrepareApplicationDocsJob::class, function (PrepareApplicationDocsJob $job) use ($application): bool {
+            return $job->applicationId === $application->id;
+        });
+
+        app(CreateQueuedApplicationFromMatch::class)->handle($match);
+
+        Queue::assertPushed(PrepareApplicationDocsJob::class, 1);
     }
 
     public function test_eligible_queued_match_creates_one_application_queued(): void

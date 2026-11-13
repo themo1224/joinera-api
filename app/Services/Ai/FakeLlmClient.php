@@ -10,6 +10,16 @@ class FakeLlmClient implements LlmClient
 {
     public const FAIL_MARKER = 'FAIL_LLM';
 
+    public const EMPTY_MARKER = 'EMPTY_LLM';
+
+    /** @var list<string> */
+    private array $forcedContents = [];
+
+    public function queueContent(string $content): void
+    {
+        $this->forcedContents[] = $content;
+    }
+
     public function chat(array $messages, array $options = []): LlmChatResult
     {
         $lastUser = '';
@@ -24,8 +34,16 @@ class FakeLlmClient implements LlmClient
             throw new LlmRequestException('Fake LLM forced failure.', 500);
         }
 
+        if ($this->forcedContents !== []) {
+            $content = array_shift($this->forcedContents) ?? '';
+        } elseif (str_contains($lastUser, self::EMPTY_MARKER)) {
+            $content = '';
+        } else {
+            $content = "FAKE_COVER\n\n".$lastUser;
+        }
+
         return new LlmChatResult(
-            content: "FAKE_COVER\n\n".$lastUser,
+            content: $content,
             model: 'fake/llm',
             finishReason: 'stop',
             usage: [

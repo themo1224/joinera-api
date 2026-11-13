@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\ParseStatus;
+use App\Events\CandidateMatchRecomputeRequested;
 use App\Models\CvAsset;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
@@ -39,6 +40,8 @@ class CvStorage
             $profile = $user->ensureProfile();
             $profile->parse_status = ParseStatus::Unparsed;
             $profile->save();
+
+            CandidateMatchRecomputeRequested::dispatch($user->id);
 
             return $asset;
         });

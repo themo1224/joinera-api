@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Application pipeline row for one Candidate + listing.
  *
  * Default status is {@see ApplicationStatus::Matched} (PRD first pipeline stage).
- * Auto-promote matched → queued is a later plan — not done on create.
+ * Auto-promote matched → queued is owned by {@see \App\Services\CreateQueuedApplicationFromMatch}.
  */
 #[Fillable([
     'user_id',

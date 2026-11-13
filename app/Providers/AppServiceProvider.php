@@ -11,8 +11,12 @@ use App\Contracts\LlmClient;
 use App\Contracts\MailboxInboundSync;
 use App\Contracts\MailboxOutboundMailer;
 use App\Contracts\MailboxProvider;
-use App\Services\Ai\FakeLlmClient;
-use App\Services\Ai\OpenRouterLlmClient;
+use App\Events\CandidateMatchRecomputeRequested;
+use App\Events\ListingCreated;
+use App\Events\ProfilePrioritiesChanged;
+use App\Listeners\DispatchMatchListingOnListingCreated;
+use App\Listeners\DispatchRematchOnCandidateMatchRecomputeRequested;
+use App\Listeners\DispatchRematchOnProfilePrioritiesChanged;
 use App\Services\ArbeitsagenturDe\ArbeitsagenturDeIntakeAdapter;
 use App\Services\ArbeitsagenturDe\FakeArbeitsagenturDeHttpClient;
 use App\Services\ArbeitsagenturDe\LaravelArbeitsagenturDeHttpClient;
@@ -22,6 +26,8 @@ use App\Services\AusbildungDe\LaravelAusbildungDeHttpClient;
 use App\Services\Azubiyo\AzubiyoIntakeAdapter;
 use App\Services\Azubiyo\FakeAzubiyoHttpClient;
 use App\Services\Azubiyo\LaravelAzubiyoHttpClient;
+use App\Services\Ai\FakeLlmClient;
+use App\Services\Ai\OpenRouterLlmClient;
 use App\Services\FakeMailboxInboundSync;
 use App\Services\FakeMailboxOutboundMailer;
 use App\Services\FixtureCvParser;
@@ -32,6 +38,7 @@ use App\Services\LocalMailboxProvider;
 use App\Services\SiteIntakeAdapterRegistry;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
@@ -123,6 +130,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Event::listen(ListingCreated::class, DispatchMatchListingOnListingCreated::class);
+        Event::listen(ProfilePrioritiesChanged::class, DispatchRematchOnProfilePrioritiesChanged::class);
+        Event::listen(CandidateMatchRecomputeRequested::class, DispatchRematchOnCandidateMatchRecomputeRequested::class);
+
         RateLimiter::for('login', function (Request $request) {
             $email = strtolower((string) $request->input('email'));
 

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Contracts\MailboxInboundSync;
 use App\Enums\MailboxState;
+use App\Events\CandidateMatchRecomputeRequested;
 use App\Exceptions\MailboxAddressRejectedException;
 use App\Exceptions\MailboxAuthFailedException;
 use App\Exceptions\MailboxProviderUnsetException;
@@ -89,6 +90,7 @@ class AttachGmxMailbox
         ])->save();
 
         $ready = $mailbox->fresh() ?? $mailbox;
+        CandidateMatchRecomputeRequested::dispatch($user->id);
         SyncGmxMailboxJob::dispatch($ready->id);
 
         return $ready;

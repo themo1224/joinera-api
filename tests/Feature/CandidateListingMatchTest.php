@@ -17,6 +17,7 @@ class CandidateListingMatchTest extends TestCase
 
     public function test_match_status_and_hard_skip_reason_enum_values(): void
     {
+        $this->assertSame('proposed', MatchStatus::Proposed->value);
         $this->assertSame('skipped', MatchStatus::Skipped->value);
         $this->assertSame('queued', MatchStatus::Queued->value);
         $this->assertSame('industry', MatchHardSkipReason::Industry->value);

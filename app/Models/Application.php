@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * Application pipeline row for one Candidate + listing.
  *
  * Default status is {@see ApplicationStatus::Matched} (PRD first pipeline stage).
- * Auto-promote matched → queued is owned by {@see CreateQueuedApplicationFromMatch}.
+ * Staff queue-selected (or force-queue) promotes matched → queued via {@see CreateQueuedApplicationFromMatch}.
  * Docs prepare (queued → preparing_docs → applying) is owned by PrepareApplicationDocuments.
  * Browser submit (Mode B) starts only from applying with both DocArtifacts present.
  */

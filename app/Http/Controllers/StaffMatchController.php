@@ -4,19 +4,28 @@ namespace App\Http\Controllers;
 
 use App\Enums\MatchStatus;
 use App\Enums\Role;
+use App\Exceptions\ApplyCapExceededException;
+use App\Exceptions\MatchNotProposedException;
 use App\Exceptions\MatchNotSkippedException;
 use App\Http\Requests\ListMatchesRequest;
+use App\Http\Requests\QueueSelectedMatchesRequest;
 use App\Models\CandidateListingMatch;
+use App\Models\User;
 use App\Services\BuildMatchOpsItem;
 use App\Services\ForceQueueCandidateListingMatch;
+use App\Services\QueueSelectedCandidateListingMatches;
+use App\Services\ResolveApplyCapUsage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use InvalidArgumentException;
 
 class StaffMatchController extends Controller
 {
     public function __construct(
         private readonly BuildMatchOpsItem $buildMatchOpsItem,
         private readonly ForceQueueCandidateListingMatch $forceQueue,
+        private readonly QueueSelectedCandidateListingMatches $queueSelected,
+        private readonly ResolveApplyCapUsage $resolveApplyCapUsage,
     ) {
     }
 
@@ -33,14 +42,16 @@ class StaffMatchController extends Controller
             ->with(['user', 'listing', 'application', 'forceQueuedBy'])
             ->orderByDesc('id');
 
+        $userId = null;
         if ($request->filled('userId')) {
-            $query->where('user_id', (int) $request->integer('userId'));
+            $userId = (int) $request->integer('userId');
+            $query->where('user_id', $userId);
         }
 
         $total = (clone $query)->count();
         $matches = $query->offset($offset)->limit($limit)->get();
 
-        return response()->json([
+        $payload = [
             'success' => true,
             'total' => $total,
             'offset' => $offset,
@@ -49,6 +60,71 @@ class StaffMatchController extends Controller
                 ->map(fn (CandidateListingMatch $match): array => $this->buildMatchOpsItem->handle($match))
                 ->values()
                 ->all(),
+        ];
+
+        if ($userId !== null) {
+            $candidate = User::query()->where('role', Role::User)->find($userId);
+            if ($candidate !== null) {
+                $payload['applyCap'] = $this->resolveApplyCapUsage->handle($candidate);
+            }
+        }
+
+        return response()->json($payload);
+    }
+
+    public function queueSelected(QueueSelectedMatchesRequest $request): JsonResponse
+    {
+        $userId = (int) $request->integer('userId');
+        /** @var list<int> $matchIds */
+        $matchIds = array_map('intval', $request->input('matchIds', []));
+
+        $candidate = User::query()->where('role', Role::User)->find($userId);
+
+        if ($candidate === null) {
+            return response()->json([
+                'code' => 'not_found',
+                'message' => 'Not found.',
+            ], 404);
+        }
+
+        try {
+            $result = $this->queueSelected->handle($candidate, $matchIds, $request->user());
+        } catch (ApplyCapExceededException $exception) {
+            return response()->json([
+                'code' => 'apply_cap_reached',
+                'message' => $exception->getMessage(),
+                'applyCap' => $exception->applyCap,
+            ], 409);
+        } catch (MatchNotProposedException) {
+            return response()->json([
+                'code' => 'match_not_proposed',
+                'message' => 'Only proposed matches can be queued.',
+            ], 409);
+        } catch (InvalidArgumentException $exception) {
+            $code = $exception->getMessage();
+            if ($code === 'queue_selected_not_found') {
+                return response()->json([
+                    'code' => 'not_found',
+                    'message' => 'Not found.',
+                ], 404);
+            }
+
+            return response()->json([
+                'code' => 'validation_error',
+                'message' => 'Invalid queue selection.',
+            ], 422);
+        }
+
+        return response()->json([
+            'matches' => array_map(
+                fn (CandidateListingMatch $match): array => $this->buildMatchOpsItem->handle($match),
+                $result['matches'],
+            ),
+            'applications' => array_map(
+                fn ($application): array => $this->buildMatchOpsItem->applicationPayload($application),
+                $result['applications'],
+            ),
+            'applyCap' => $result['applyCap'],
         ]);
     }
 
@@ -65,6 +141,12 @@ class StaffMatchController extends Controller
 
         try {
             $result = $this->forceQueue->handle($match, $request->user());
+        } catch (ApplyCapExceededException $exception) {
+            return response()->json([
+                'code' => 'apply_cap_reached',
+                'message' => $exception->getMessage(),
+                'applyCap' => $exception->applyCap,
+            ], 409);
         } catch (MatchNotSkippedException) {
             return response()->json([
                 'code' => 'match_not_skipped',
@@ -75,6 +157,7 @@ class StaffMatchController extends Controller
         return response()->json([
             'match' => $this->buildMatchOpsItem->handle($result['match']),
             'application' => $this->buildMatchOpsItem->applicationPayload($result['application']),
+            'applyCap' => $result['applyCap'] ?? null,
         ]);
     }
 }

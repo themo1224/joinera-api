@@ -45,6 +45,17 @@ class CandidateListingMatchFactory extends Factory
         ]);
     }
 
+    public function proposed(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => MatchStatus::Proposed,
+            'hard_skip_reason' => null,
+            'queued_at' => null,
+            'force_queued_by' => null,
+            'force_queued_at' => null,
+        ]);
+    }
+
     public function queued(): static
     {
         return $this->state(fn (array $attributes) => [

@@ -69,13 +69,13 @@ class StoreMatchSoftSignalsTest extends TestCase
         $match = CandidateListingMatch::factory()
             ->for($user)
             ->for($listing)
-            ->queued()
+            ->proposed()
             ->withSoftSignals(['location' => ['mismatch' => true, 'reason' => 'stale']])
             ->create();
 
         $stored = app(StoreMatchSoftSignals::class)->handle($match, $profile->fresh(), $listing);
 
-        $this->assertSame(MatchStatus::Queued, $stored->status);
+        $this->assertSame(MatchStatus::Proposed, $stored->status);
         $this->assertNull($stored->hard_skip_reason);
         $this->assertNull($stored->soft_signals);
     }

@@ -72,7 +72,7 @@ class CreateQueuedApplicationFromMatchTest extends TestCase
         Queue::assertPushed(PrepareApplicationDocsJob::class, 1);
     }
 
-    public function test_eligible_queued_match_creates_one_application_queued(): void
+    public function test_eligible_upsert_stays_proposed_without_application(): void
     {
         Event::fake([ApplicationStatusChanged::class]);
 
@@ -89,26 +89,12 @@ class CreateQueuedApplicationFromMatchTest extends TestCase
         $match = app(UpsertCandidateListingMatch::class)->handle($applicant, $listing);
 
         $this->assertNotNull($match);
-        $this->assertSame(MatchStatus::Queued, $match->status);
-        $this->assertSame(1, Application::query()->count());
-
-        $application = Application::query()->first();
-        $this->assertNotNull($application);
-        $this->assertSame(ApplicationStatus::Queued, $application->status);
-        $this->assertSame($applicant->id, $application->user_id);
-        $this->assertSame($listing->id, $application->listing_id);
-        $this->assertSame($match->id, $application->candidate_listing_match_id);
-        $this->assertSame('ausbildung.de', $application->site);
-        $this->assertNotSame(ApplicationStatus::Submitted, $application->status);
-
-        Event::assertDispatched(ApplicationStatusChanged::class, function (ApplicationStatusChanged $event) use ($application): bool {
-            return $event->applicationId === $application->id
-                && $event->from === ApplicationStatus::Matched->value
-                && $event->to === ApplicationStatus::Queued->value;
-        });
+        $this->assertSame(MatchStatus::Proposed, $match->status);
+        $this->assertSame(0, Application::query()->count());
+        Event::assertNotDispatched(ApplicationStatusChanged::class);
     }
 
-    public function test_repeat_upsert_returns_same_application_id(): void
+    public function test_repeat_proposed_upsert_creates_no_application(): void
     {
         Event::fake([ApplicationStatusChanged::class]);
 
@@ -117,20 +103,12 @@ class CreateQueuedApplicationFromMatchTest extends TestCase
         $listing = $this->createHardPassListing();
 
         app(UpsertCandidateListingMatch::class)->handle($applicant, $listing);
-        $first = Application::query()->first();
-        $this->assertNotNull($first);
-
-        Event::assertDispatchedTimes(ApplicationStatusChanged::class, 1);
-
         app(UpsertCandidateListingMatch::class)->handle($applicant, $listing);
 
-        $this->assertSame(1, Application::query()->count());
-        $second = Application::query()->first();
-        $this->assertNotNull($second);
-        $this->assertSame($first->id, $second->id);
-        $this->assertSame(ApplicationStatus::Queued, $second->status);
-
-        Event::assertDispatchedTimes(ApplicationStatusChanged::class, 1);
+        $this->assertSame(1, CandidateListingMatch::query()->count());
+        $this->assertSame(MatchStatus::Proposed, CandidateListingMatch::query()->value('status'));
+        $this->assertSame(0, Application::query()->count());
+        Event::assertNotDispatched(ApplicationStatusChanged::class);
     }
 
     public function test_hard_skipped_match_creates_no_application(): void
@@ -157,7 +135,7 @@ class CreateQueuedApplicationFromMatchTest extends TestCase
         $this->assertSame(0, Application::query()->count());
     }
 
-    public function test_soft_mismatch_still_creates_queued_application(): void
+    public function test_soft_mismatch_stays_proposed_without_application(): void
     {
         $staff = User::factory()->staff()->create();
         $applicant = $this->createEligibleApplicant($staff, language: 'fa', city: 'Berlin');
@@ -172,14 +150,10 @@ class CreateQueuedApplicationFromMatchTest extends TestCase
         $match = app(UpsertCandidateListingMatch::class)->handle($applicant, $listing);
 
         $this->assertNotNull($match);
-        $this->assertSame(MatchStatus::Queued, $match->status);
+        $this->assertSame(MatchStatus::Proposed, $match->status);
         $this->assertIsArray($match->soft_signals);
         $this->assertSame('language_code_mismatch', $match->soft_signals['language_level']['reason']);
-
-        $application = Application::query()->first();
-        $this->assertNotNull($application);
-        $this->assertSame(ApplicationStatus::Queued, $application->status);
-        $this->assertSame('azubiyo', $application->site);
+        $this->assertSame(0, Application::query()->count());
     }
 
     public function test_force_queued_match_fixture_creates_application_via_shared_service(): void

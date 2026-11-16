@@ -44,7 +44,7 @@ class MatchRunnerTest extends TestCase
         Queue::fake([PrepareApplicationDocsJob::class]);
     }
 
-    public function test_eligible_hard_pass_writes_queued_match(): void
+    public function test_eligible_hard_pass_writes_proposed_match(): void
     {
         $staff = User::factory()->staff()->create();
         $applicant = $this->createEligibleApplicant($staff);
@@ -53,9 +53,9 @@ class MatchRunnerTest extends TestCase
         $match = app(UpsertCandidateListingMatch::class)->handle($applicant, $listing);
 
         $this->assertNotNull($match);
-        $this->assertSame(MatchStatus::Queued, $match->status);
+        $this->assertSame(MatchStatus::Proposed, $match->status);
         $this->assertNull($match->hard_skip_reason);
-        $this->assertNotNull($match->queued_at);
+        $this->assertNull($match->queued_at);
         $this->assertSame(1, CandidateListingMatch::query()->count());
     }
 
@@ -132,7 +132,7 @@ class MatchRunnerTest extends TestCase
         $match = app(UpsertCandidateListingMatch::class)->handle($applicant, $listing);
 
         $this->assertNotNull($match);
-        $this->assertSame(MatchStatus::Queued, $match->status);
+        $this->assertSame(MatchStatus::Proposed, $match->status);
         $this->assertNull($match->hard_skip_reason);
         $this->assertIsArray($match->soft_signals);
         $this->assertSame('language_code_mismatch', $match->soft_signals['language_level']['reason']);
@@ -164,7 +164,7 @@ class MatchRunnerTest extends TestCase
         $this->assertNotNull($match);
         $this->assertSame($applicant->id, $match->user_id);
         $this->assertSame($listing->id, $match->listing_id);
-        $this->assertSame(MatchStatus::Queued, $match->status);
+        $this->assertSame(MatchStatus::Proposed, $match->status);
     }
 
     public function test_listing_created_dispatches_match_listing_job_on_match_queue(): void
@@ -244,7 +244,7 @@ class MatchRunnerTest extends TestCase
 
         $this->assertSame(2, CandidateListingMatch::query()->count());
         $this->assertSame(
-            MatchStatus::Queued,
+            MatchStatus::Proposed,
             CandidateListingMatch::query()->where('listing_id', $pass->id)->value('status'),
         );
         $this->assertSame(

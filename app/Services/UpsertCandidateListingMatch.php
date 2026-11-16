@@ -41,17 +41,16 @@ class UpsertCandidateListingMatch
             ->first();
 
         $forceQueued = $existing !== null && $existing->force_queued_at !== null;
+        $alreadyQueued = $existing !== null && $existing->status === MatchStatus::Queued;
 
-        if ($forceQueued) {
+        if ($forceQueued || ($alreadyQueued && $hard['eligible'])) {
             $status = MatchStatus::Queued;
             $hardSkipReason = null;
             $queuedAt = $existing->queued_at ?? now();
         } elseif ($hard['eligible']) {
-            $status = MatchStatus::Queued;
+            $status = MatchStatus::Proposed;
             $hardSkipReason = null;
-            $queuedAt = $existing?->status === MatchStatus::Queued && $existing->queued_at !== null
-                ? $existing->queued_at
-                : now();
+            $queuedAt = null;
         } else {
             $status = MatchStatus::Skipped;
             $hardSkipReason = $hard['hard_skip_reason'];
@@ -74,6 +73,7 @@ class UpsertCandidateListingMatch
 
         $match = $this->storeSoftSignals->handle($match, $profile, $listing);
 
+        // Applications are created only after staff queues (or force-queues) a match.
         if ($match->status === MatchStatus::Queued) {
             $this->createQueuedApplication->handle($match);
         }

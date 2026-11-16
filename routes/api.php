@@ -82,6 +82,7 @@ Route::prefix('v1')->group(function () {
         Route::get('users/{user}/identity/readiness', [StaffIdentityReadinessController::class, 'show'])->middleware('staff');
 
         Route::get('matches', [StaffMatchController::class, 'index'])->middleware('staff');
+        Route::post('matches/queue-selected', [StaffMatchController::class, 'queueSelected'])->middleware('staff');
         Route::post('matches/{match}/force-queue', [StaffMatchController::class, 'forceQueue'])->middleware('staff');
 
         Route::get('applications', [StaffApplicationController::class, 'index'])->middleware('staff');
@@ -96,7 +97,6 @@ Route::prefix('v1')->group(function () {
         Route::get('ops/blocks', [StaffBlockEventController::class, 'index'])->middleware('staff');
         Route::post('site-identities/{siteIdentity}/break-glass', [StaffBreakGlassController::class, 'store'])
             ->middleware('staff');
-
 
         Route::get('industries', [StaffIndustryController::class, 'index'])->middleware('staff');
         Route::post('industries', [StaffIndustryController::class, 'store'])->middleware('staff');

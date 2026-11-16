@@ -20,6 +20,7 @@ class ListMatchesRequest extends FormRequest
     {
         return [
             'status' => ['required', 'string', Rule::in([
+                MatchStatus::Proposed->value,
                 MatchStatus::Queued->value,
                 MatchStatus::Skipped->value,
             ])],

@@ -31,13 +31,37 @@ class ListingLocation
      */
     public function citiesMatch(?string $profileCity, ?string $listingCity): ?bool
     {
-        $profile = $this->normalizeCity($profileCity);
-        $listing = $this->normalizeCity($listingCity);
+        return $this->citiesMatchAny(
+            $profileCity === null || $profileCity === '' ? [] : [$profileCity],
+            $listingCity,
+        );
+    }
 
-        if ($profile === null || $listing === null) {
+    /**
+     * Empty profile city list means all cities (no mismatch).
+     *
+     * @param  list<string>  $profileCities
+     * @return bool|null true when cities match, false when mismatch, null when inconclusive
+     */
+    public function citiesMatchAny(array $profileCities, ?string $listingCity): ?bool
+    {
+        $listing = $this->normalizeCity($listingCity);
+        if ($listing === null) {
             return null;
         }
 
-        return $profile === $listing;
+        $normalized = [];
+        foreach ($profileCities as $city) {
+            $value = $this->normalizeCity($city);
+            if ($value !== null) {
+                $normalized[] = $value;
+            }
+        }
+
+        if ($normalized === []) {
+            return true;
+        }
+
+        return in_array($listing, $normalized, true);
     }
 }

@@ -21,7 +21,7 @@ class ProfileTest extends TestCase
         $this->actingAs($user, 'sanctum')
             ->putJson('/api/v1/profile', ['industry' => 'IT'])
             ->assertOk()
-            ->assertJsonPath('industry', 'IT')
+            ->assertJsonPath('industry', ['IT'])
             ->assertJsonPath('complete', false)
             ->assertJsonPath('cv', null);
     }
@@ -216,9 +216,9 @@ class ProfileTest extends TestCase
         $this->actingAs($staff, 'sanctum')
             ->getJson('/api/v1/users/'.$user->id.'/profile')
             ->assertOk()
-            ->assertJsonPath('industry', 'IT')
-            ->assertJsonPath('city', 'Berlin')
-            ->assertJsonPath('province', 'BE')
+            ->assertJsonPath('industry', ['IT'])
+            ->assertJsonPath('city', ['Berlin'])
+            ->assertJsonPath('province', ['BE'])
             ->assertJsonPath('language', 'de')
             ->assertJsonPath('education', 'Abitur')
             ->assertJsonPath('desired_path', 'ausbildung')
@@ -242,7 +242,7 @@ class ProfileTest extends TestCase
         $this->actingAs($admin, 'sanctum')
             ->getJson('/api/v1/users/'.$user->id.'/profile')
             ->assertOk()
-            ->assertJsonPath('city', 'Munich')
+            ->assertJsonPath('city', ['Munich'])
             ->assertJsonPath('complete', false);
     }
 
@@ -268,9 +268,9 @@ class ProfileTest extends TestCase
                 'cv' => UploadedFile::fake()->create('cv.pdf', 100, 'application/pdf'),
             ])
             ->assertCreated()
-            ->assertJsonPath('industry', null)
-            ->assertJsonPath('city', null)
-            ->assertJsonPath('province', null)
+            ->assertJsonPath('industry', [])
+            ->assertJsonPath('city', [])
+            ->assertJsonPath('province', [])
             ->assertJsonPath('language', null)
             ->assertJsonPath('complete', false)
             ->assertJsonPath('parse_status', 'unparsed')
@@ -421,9 +421,9 @@ class ProfileTest extends TestCase
                 ],
             ])
             ->assertOk()
-            ->assertJsonPath('industry', 'IT')
-            ->assertJsonPath('city', 'Berlin')
-            ->assertJsonPath('province', 'BE')
+            ->assertJsonPath('industry', ['IT'])
+            ->assertJsonPath('city', ['Berlin'])
+            ->assertJsonPath('province', ['BE'])
             ->assertJsonPath('language', 'de')
             ->assertJsonPath('education', 'Bachelor')
             ->assertJsonPath('desired_path', 'job')
@@ -439,17 +439,17 @@ class ProfileTest extends TestCase
         $this->actingAs($staff, 'sanctum')
             ->getJson('/api/v1/users/'.$candidate->id.'/profile')
             ->assertOk()
-            ->assertJsonPath('industry', 'IT')
-            ->assertJsonPath('city', 'Berlin')
-            ->assertJsonPath('province', 'BE')
+            ->assertJsonPath('industry', ['IT'])
+            ->assertJsonPath('city', ['Berlin'])
+            ->assertJsonPath('province', ['BE'])
             ->assertJsonPath('language', 'de');
 
         $this->actingAs($staff, 'sanctum')
             ->getJson('/api/v1/applicants/'.$candidate->id)
             ->assertOk()
-            ->assertJsonPath('industry', 'IT')
-            ->assertJsonPath('city', 'Berlin')
-            ->assertJsonPath('province', 'BE')
+            ->assertJsonPath('industry', ['IT'])
+            ->assertJsonPath('city', ['Berlin'])
+            ->assertJsonPath('province', ['BE'])
             ->assertJsonPath('language', 'de');
     }
 
@@ -463,13 +463,13 @@ class ProfileTest extends TestCase
                 'city' => 'Munich',
             ])
             ->assertOk()
-            ->assertJsonPath('city', 'Munich')
+            ->assertJsonPath('city', ['Munich'])
             ->assertJsonMissingPath('password');
 
         $this->actingAs($admin, 'sanctum')
             ->getJson('/api/v1/applicants/'.$candidate->id)
             ->assertOk()
-            ->assertJsonPath('city', 'Munich');
+            ->assertJsonPath('city', ['Munich']);
     }
 
     public function test_staff_cannot_update_profile_for_staff_or_admin_target(): void

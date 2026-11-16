@@ -96,7 +96,13 @@ class StaffProfileController extends Controller
 
         foreach (self::MATCH_INPUT_FIELDS as $field) {
             $value = $profile->{$field};
-            $snapshot[$field] = is_string($value) ? $value : null;
+            if (is_array($value)) {
+                $snapshot[$field] = array_values($value);
+            } elseif (is_string($value)) {
+                $snapshot[$field] = $value;
+            } else {
+                $snapshot[$field] = null;
+            }
         }
 
         return $snapshot;

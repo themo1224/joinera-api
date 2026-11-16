@@ -22,9 +22,9 @@ class ProfileFactory extends Factory
     {
         return [
             'user_id' => User::factory(),
-            'industry' => fake()->randomElement(['Healthcare', 'IT', 'Hospitality', 'Logistics']),
-            'city' => fake()->randomElement(['Berlin', 'Hamburg', 'Munich', 'Cologne']),
-            'province' => fake()->randomElement(['BE', 'HH', 'BY', 'NW']),
+            'industry' => [fake()->randomElement(['Healthcare', 'IT', 'Hospitality', 'Logistics'])],
+            'city' => [fake()->randomElement(['Berlin', 'Hamburg', 'Munich', 'Cologne'])],
+            'province' => [fake()->randomElement(['BE', 'HH', 'BY', 'NW'])],
             'language' => fake()->randomElement(['de', 'en', 'de+en']),
             'education' => null,
             'desired_path' => null,
@@ -89,9 +89,9 @@ class ProfileFactory extends Factory
     public function incomplete(): static
     {
         return $this->state(fn (array $attributes) => [
-            'industry' => null,
-            'city' => null,
-            'province' => null,
+            'industry' => [],
+            'city' => [],
+            'province' => [],
             'language' => null,
             'education' => null,
             'desired_path' => null,
@@ -101,9 +101,9 @@ class ProfileFactory extends Factory
     public function completeProfile(): static
     {
         return $this->state(fn (array $attributes) => [
-            'industry' => $attributes['industry'] ?? 'IT',
-            'city' => $attributes['city'] ?? 'Berlin',
-            'province' => $attributes['province'] ?? 'BE',
+            'industry' => $attributes['industry'] ?? ['IT'],
+            'city' => $attributes['city'] ?? ['Berlin'],
+            'province' => $attributes['province'] ?? ['BE'],
             'language' => $attributes['language'] ?? 'de',
             'education' => $attributes['education'] ?? 'Abitur',
             'desired_path' => $attributes['desired_path'] ?? 'ausbildung',

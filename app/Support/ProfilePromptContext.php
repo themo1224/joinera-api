@@ -16,9 +16,9 @@ class ProfilePromptContext
     {
         $lines = [
             'Profil:',
-            '- Branche: '.($profile->industry ?? ''),
-            '- Stadt: '.($profile->city ?? ''),
-            '- Bundesland: '.($profile->province ?? ''),
+            '- Branche: '.Profile::joinLabels($profile->industry),
+            '- Stadt: '.($profile->cityList() === [] ? 'alle' : Profile::joinLabels($profile->city)),
+            '- Bundesland: '.($profile->provinceList() === [] ? 'alle' : Profile::joinLabels($profile->province)),
             '- App-Sprache: '.($profile->language ?? ''),
             '- Ausbildungsniveau (Matching): '.($profile->education ?? ''),
             '- Wunschweg: '.($profile->desired_path ?? ''),

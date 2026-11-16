@@ -39,14 +39,21 @@ class EvaluateMatchHardRules
 
     private function failsIndustry(Profile $profile, Listing $listing): bool
     {
-        $industry = $this->normalizeLabel($profile->industry);
+        $industries = [];
+        foreach ($profile->industryList() as $label) {
+            $normalized = $this->normalizeLabel($label);
+            if ($normalized !== null) {
+                $industries[] = $normalized;
+            }
+        }
+
         $category = $this->normalizeLabel($listing->category);
 
-        if ($industry === null || $category === null) {
+        if ($industries === [] || $category === null) {
             return false;
         }
 
-        return $industry !== $category;
+        return ! in_array($category, $industries, true);
     }
 
     private function failsGermany(Listing $listing): bool

@@ -55,6 +55,17 @@ class EvaluateMatchHardRulesTest extends TestCase
         $this->assertNull($result['hard_skip_reason']);
     }
 
+    public function test_industry_matches_when_listing_category_in_profile_list(): void
+    {
+        $result = $this->evaluate(
+            $this->profile(industry: ['Nursing', 'IT']),
+            HardRuleListings::make('passAll'),
+        );
+
+        $this->assertTrue($result['eligible']);
+        $this->assertNull($result['hard_skip_reason']);
+    }
+
     public function test_non_germany_fails_e(): void
     {
         $result = $this->evaluate(
@@ -177,16 +188,20 @@ class EvaluateMatchHardRulesTest extends TestCase
         return (new EvaluateMatchHardRules)->handle($profile, $listing);
     }
 
+    /**
+     * @param  string|list<string>  $industry
+     * @param  string|list<string>  $city
+     */
     private function profile(
-        string $industry,
+        string|array $industry,
         ?string $education = null,
-        string $city = 'Berlin',
+        string|array $city = 'Berlin',
         string $language = 'de',
     ): Profile {
         return Profile::make([
             'industry' => $industry,
             'city' => $city,
-            'province' => 'BE',
+            'province' => ['BE'],
             'language' => $language,
             'education' => $education,
         ]);

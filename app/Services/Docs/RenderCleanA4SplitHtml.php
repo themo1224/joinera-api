@@ -32,8 +32,8 @@ class RenderCleanA4SplitHtml
 
         $email = $this->e((string) ($user->email ?? ''));
         $city = $this->e(trim(implode(', ', array_filter([
-            (string) ($profile->city ?? ''),
-            (string) ($profile->province ?? ''),
+            Profile::joinLabels($profile->city),
+            Profile::joinLabels($profile->province),
         ]))));
 
         $experienceHtml = $this->experienceColumn($profile);
@@ -142,7 +142,7 @@ HTML;
         $title = $this->e($this->professionalTitle($profile));
         $initials = $this->e($this->initials($this->displayName($user)));
         $email = $this->e((string) ($user->email ?? ''));
-        $city = $this->e((string) ($profile->city ?? ''));
+        $city = $this->e(Profile::joinLabels($profile->city));
         $date = $this->e(now()->format('d.m.Y'));
         $recipient = $this->e($listing?->company ? (string) $listing->company : 'Personalabteilung');
         $coverTitle = $this->e($this->coverTitle($profile, $listing));
@@ -322,10 +322,11 @@ HTML;
                 .'<div class="aside-item">'.$this->e(implode(', ', $skills)).'</div></div>';
         }
 
+        $industryJoined = Profile::joinLabels($profile->industry);
         $proBits = array_filter([
             $this->str($profile->preferred_occupation ?? null),
             $this->str($profile->desired_path ?? null),
-            $this->str($profile->industry ?? null),
+            $industryJoined !== '' ? $industryJoined : null,
         ]);
         if ($proBits !== []) {
             $parts[] = '<div class="aside-block"><p class="aside-title">Berufliche Kenntnisse</p>'
@@ -391,16 +392,19 @@ HTML;
 
     private function professionalTitle(Profile $profile): string
     {
+        $industryJoined = Profile::joinLabels($profile->industry);
+
         return $this->str($profile->preferred_occupation ?? null)
-            ?? $this->str($profile->industry ?? null)
+            ?? ($industryJoined !== '' ? $industryJoined : null)
             ?? 'Bewerber';
     }
 
     private function coverTitle(Profile $profile, ?Listing $listing): string
     {
+        $industryJoined = Profile::joinLabels($profile->industry);
         $role = $this->str($listing?->title)
             ?? $this->str($profile->preferred_occupation ?? null)
-            ?? $this->str($profile->industry ?? null);
+            ?? ($industryJoined !== '' ? $industryJoined : null);
 
         return $role !== null ? 'Bewerbung als '.$role : 'Bewerbung';
     }

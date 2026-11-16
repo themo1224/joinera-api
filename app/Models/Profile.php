@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\StringListCast;
 use App\Enums\ApprovalStatus;
 use App\Enums\ParseStatus;
 use App\Support\EducationRequirement;
@@ -61,6 +62,9 @@ class Profile extends Model
     protected function casts(): array
     {
         return [
+            'industry' => StringListCast::class,
+            'city' => StringListCast::class,
+            'province' => StringListCast::class,
             'parse_status' => ParseStatus::class,
             'user_edited_fields' => 'array',
             'priorities' => 'array',
@@ -74,6 +78,35 @@ class Profile extends Model
             'languages' => 'array',
             'driving_licenses' => 'array',
         ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function industryList(): array
+    {
+        return StringListCast::normalize($this->industry);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function cityList(): array
+    {
+        return StringListCast::normalize($this->city);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function provinceList(): array
+    {
+        return StringListCast::normalize($this->province);
+    }
+
+    public static function joinLabels(mixed $value): string
+    {
+        return implode(', ', StringListCast::normalize($value));
     }
 
     /**
@@ -150,12 +183,11 @@ class Profile extends Model
 
     /**
      * CV is optional enrichment — completeness is structured profile fields only.
+     * Empty city/province means all locations and still counts as complete.
      */
     public function isComplete(?CvAsset $cvAsset = null): bool
     {
-        return $this->isFilled($this->industry)
-            && $this->isFilled($this->city)
-            && $this->isFilled($this->province)
+        return $this->industryList() !== []
             && $this->isFilled($this->language)
             && $this->isFilled($this->education)
             && $this->isFilled($this->desired_path);
@@ -266,9 +298,9 @@ class Profile extends Model
     private function toFieldArray(?CvAsset $cvAsset): array
     {
         return [
-            'industry' => $this->industry,
-            'city' => $this->city,
-            'province' => $this->province,
+            'industry' => $this->industryList(),
+            'city' => $this->cityList(),
+            'province' => $this->provinceList(),
             'language' => $this->language,
             'education' => $this->education,
             'desired_path' => $this->desired_path,

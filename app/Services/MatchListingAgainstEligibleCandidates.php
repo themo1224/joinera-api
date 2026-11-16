@@ -42,11 +42,7 @@ class MatchListingAgainstEligibleCandidates
             ->whereHas('profile', function ($query): void {
                 $query->where('approval', ApprovalStatus::Approved)
                     ->whereNotNull('industry')
-                    ->where('industry', '!=', '')
-                    ->whereNotNull('city')
-                    ->where('city', '!=', '')
-                    ->whereNotNull('province')
-                    ->where('province', '!=', '')
+                    ->where('industry', '!=', '[]')
                     ->whereNotNull('language')
                     ->where('language', '!=', '')
                     ->whereNotNull('education')

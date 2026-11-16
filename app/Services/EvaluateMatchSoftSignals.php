@@ -76,9 +76,9 @@ class EvaluateMatchSoftSignals
      */
     private function locationSignal(Profile $profile, Listing $listing): ?array
     {
-        $profileCity = is_string($profile->city) ? $profile->city : null;
+        $profileCities = $profile->cityList();
         $listingCity = is_string($listing->city) ? $listing->city : null;
-        $match = $this->listingLocation->citiesMatch($profileCity, $listingCity);
+        $match = $this->listingLocation->citiesMatchAny($profileCities, $listingCity);
 
         if ($match !== false) {
             return null;
@@ -86,8 +86,8 @@ class EvaluateMatchSoftSignals
 
         return [
             'mismatch' => true,
-            'profile_city' => $profileCity,
-            'profile_province' => is_string($profile->province) ? $profile->province : null,
+            'profile_city' => Profile::joinLabels($profileCities),
+            'profile_province' => Profile::joinLabels($profile->provinceList()),
             'listing_city_raw' => $listingCity,
             'listing_city_normalized' => $this->listingLocation->normalizeCity($listingCity),
             'reason' => 'city_mismatch',

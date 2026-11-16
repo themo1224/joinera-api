@@ -17,14 +17,20 @@ class ResolveDocGenerationRule
      */
     public function handle(?Profile $profile, Listing $listing): DocGenerationRule
     {
-        $industry = $this->normalize($profile?->industry);
+        $industries = [];
+        foreach (($profile?->industryList() ?? []) as $label) {
+            $normalized = $this->normalize($label);
+            if ($normalized !== null) {
+                $industries[] = $normalized;
+            }
+        }
         $category = $this->normalize($listing->category);
 
-        if ($category === null || $industry === null) {
+        if ($category === null || $industries === []) {
             return DocGenerationRule::CvAndCover;
         }
 
-        if ($industry === $category) {
+        if (in_array($category, $industries, true)) {
             return DocGenerationRule::CoverOnly;
         }
 

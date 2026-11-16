@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Casts\StringListCast;
 use App\Models\Profile;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -10,9 +11,6 @@ use Illuminate\Validation\Rule;
 class UpdateProfileRequest extends FormRequest
 {
     private const SCALAR_STRINGS = [
-        'industry',
-        'city',
-        'province',
         'language',
         'education',
         'desired_path',
@@ -21,9 +19,32 @@ class UpdateProfileRequest extends FormRequest
         'about',
     ];
 
+    private const LABEL_LISTS = [
+        'industry',
+        'city',
+        'province',
+    ];
+
     public function authorize(): bool
     {
         return true;
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $merge = [];
+        foreach (self::LABEL_LISTS as $field) {
+            if (! $this->exists($field)) {
+                continue;
+            }
+            $raw = $this->input($field);
+            if (is_string($raw) || is_numeric($raw)) {
+                $merge[$field] = StringListCast::normalize($raw);
+            }
+        }
+        if ($merge !== []) {
+            $this->merge($merge);
+        }
     }
 
     /**
@@ -32,9 +53,12 @@ class UpdateProfileRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'industry' => ['sometimes', 'required', 'string', 'min:1', 'max:255'],
-            'city' => ['sometimes', 'required', 'string', 'min:1', 'max:255'],
-            'province' => ['sometimes', 'required', 'string', 'min:1', 'max:255'],
+            'industry' => ['sometimes', 'required', 'array', 'min:1', 'max:30'],
+            'industry.*' => ['required', 'string', 'min:1', 'max:255'],
+            'city' => ['sometimes', 'present', 'array', 'max:40'],
+            'city.*' => ['string', 'min:1', 'max:255'],
+            'province' => ['sometimes', 'present', 'array', 'max:40'],
+            'province.*' => ['string', 'min:1', 'max:255'],
             'language' => ['sometimes', 'required', 'string', 'min:1', 'max:255'],
             'education' => ['sometimes', 'nullable', 'string', 'max:255'],
             'desired_path' => ['sometimes', 'nullable', 'string', Rule::in(Profile::DESIRED_PATHS)],
@@ -73,14 +97,12 @@ class UpdateProfileRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
-            foreach (['industry', 'city', 'province', 'language'] as $field) {
-                if (! $this->exists($field)) {
-                    continue;
-                }
+            if ($this->exists('language') && trim((string) $this->input('language')) === '') {
+                $validator->errors()->add('language', 'The language field cannot be empty.');
+            }
 
-                if (trim((string) $this->input($field)) === '') {
-                    $validator->errors()->add($field, "The {$field} field cannot be empty.");
-                }
+            if ($this->exists('industry') && StringListCast::normalize($this->input('industry')) === []) {
+                $validator->errors()->add('industry', 'The industry field must include at least one value.');
             }
         });
     }
@@ -91,6 +113,14 @@ class UpdateProfileRequest extends FormRequest
     public function validatedFields(): array
     {
         $fields = [];
+
+        foreach (self::LABEL_LISTS as $field) {
+            if (! $this->exists($field)) {
+                continue;
+            }
+
+            $fields[$field] = StringListCast::normalize($this->input($field));
+        }
 
         foreach (self::SCALAR_STRINGS as $field) {
             if (! $this->exists($field)) {

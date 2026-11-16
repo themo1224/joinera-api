@@ -26,8 +26,6 @@ class FixtureCvParser implements CvParser
 
         return new CvParseResult(
             industry: 'IT',
-            city: 'Berlin',
-            province: 'BE',
             language: 'de',
         );
     }

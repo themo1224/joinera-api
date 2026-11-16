@@ -19,8 +19,8 @@ class UpdatePrioritiesRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'priorities' => ['required', 'array', 'size:3'],
-            'priorities.*' => ['required', 'string', 'in:industry,city,province'],
+            'priorities' => ['required', 'array', 'size:1'],
+            'priorities.*' => ['required', 'string', 'in:industry'],
         ];
     }
 
@@ -39,8 +39,8 @@ class UpdatePrioritiesRequest extends FormRequest
             sort($sorted);
             sort($expectedSorted);
 
-            if ($sorted !== $expectedSorted || count(array_unique($priorities)) !== 3) {
-                $validator->errors()->add('priorities', 'The priorities must be a permutation of industry, city, and province.');
+            if ($sorted !== $expectedSorted || count(array_unique($priorities)) !== count($expected)) {
+                $validator->errors()->add('priorities', 'The priorities must be a permutation of industry.');
             }
         });
     }

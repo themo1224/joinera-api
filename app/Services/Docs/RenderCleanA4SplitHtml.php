@@ -31,10 +31,8 @@ class RenderCleanA4SplitHtml
         $about = $this->paragraphsHtml($aboutText !== '' ? $aboutText : (string) ($profile->about ?? ''));
 
         $email = $this->e((string) ($user->email ?? ''));
-        $city = $this->e(trim(implode(', ', array_filter([
-            Profile::joinLabels($profile->city),
-            Profile::joinLabels($profile->province),
-        ]))));
+        // Profile city/province temporarily unused on the product surface.
+        $city = '';
 
         $experienceHtml = $this->experienceColumn($profile);
         $asideHtml = $this->asideColumn($profile);
@@ -142,7 +140,8 @@ HTML;
         $title = $this->e($this->professionalTitle($profile));
         $initials = $this->e($this->initials($this->displayName($user)));
         $email = $this->e((string) ($user->email ?? ''));
-        $city = $this->e(Profile::joinLabels($profile->city));
+        // Profile city/province temporarily unused on the product surface.
+        $city = '';
         $date = $this->e(now()->format('d.m.Y'));
         $recipient = $this->e($listing?->company ? (string) $listing->company : 'Personalabteilung');
         $coverTitle = $this->e($this->coverTitle($profile, $listing));
@@ -217,7 +216,7 @@ body {
 </table>
 
 <hr class="hr">
-<p class="meta">{$recipient}<br>{$city}, {$date}</p>
+<p class="meta">{$recipient}<br>{$date}</p>
 <p class="cover-title">{$coverTitle}</p>
 <div class="body">{$body}</div>
 </body>

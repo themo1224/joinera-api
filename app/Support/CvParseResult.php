@@ -6,8 +6,6 @@ class CvParseResult
 {
     public function __construct(
         public readonly ?string $industry = null,
-        public readonly ?string $city = null,
-        public readonly ?string $province = null,
         public readonly ?string $language = null,
     ) {
     }
@@ -19,7 +17,7 @@ class CvParseResult
     {
         $fields = [];
 
-        foreach (['industry', 'city', 'province', 'language'] as $field) {
+        foreach (['industry', 'language'] as $field) {
             $value = $this->{$field};
 
             if ($value !== null && trim($value) !== '') {

@@ -21,8 +21,6 @@ class UpdateProfileRequest extends FormRequest
 
     private const LABEL_LISTS = [
         'industry',
-        'city',
-        'province',
     ];
 
     public function authorize(): bool
@@ -55,10 +53,6 @@ class UpdateProfileRequest extends FormRequest
         return [
             'industry' => ['sometimes', 'required', 'array', 'min:1', 'max:30'],
             'industry.*' => ['required', 'string', 'min:1', 'max:255'],
-            'city' => ['sometimes', 'present', 'array', 'max:40'],
-            'city.*' => ['string', 'min:1', 'max:255'],
-            'province' => ['sometimes', 'present', 'array', 'max:40'],
-            'province.*' => ['string', 'min:1', 'max:255'],
             'language' => ['sometimes', 'required', 'string', 'min:1', 'max:255'],
             'education' => ['sometimes', 'nullable', 'string', 'max:255'],
             'desired_path' => ['sometimes', 'nullable', 'string', Rule::in(Profile::DESIRED_PATHS)],

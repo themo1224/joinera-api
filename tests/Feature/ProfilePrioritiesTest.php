@@ -20,7 +20,7 @@ class ProfilePrioritiesTest extends TestCase
             ->getJson('/api/v1/profile/priorities')
             ->assertOk()
             ->assertExactJson([
-                'priorities' => ['industry', 'city', 'province'],
+                'priorities' => ['industry'],
             ]);
 
         $this->assertDatabaseHas('profiles', [
@@ -28,7 +28,7 @@ class ProfilePrioritiesTest extends TestCase
         ]);
 
         $this->assertSame(
-            ['industry', 'city', 'province'],
+            ['industry'],
             $user->fresh()->profile->priorities,
         );
 
@@ -36,59 +36,59 @@ class ProfilePrioritiesTest extends TestCase
             ->getJson('/api/v1/profile/priorities')
             ->assertOk()
             ->assertExactJson([
+                'priorities' => ['industry'],
+            ]);
+    }
+
+    public function test_put_with_industry_priority_persists(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/v1/profile/priorities')
+            ->assertOk();
+
+        $this->actingAs($user, 'sanctum')
+            ->putJson('/api/v1/profile/priorities', [
+                'priorities' => ['industry'],
+            ])
+            ->assertOk()
+            ->assertExactJson([
+                'priorities' => ['industry'],
+            ]);
+
+        $this->assertSame(
+            ['industry'],
+            $user->fresh()->profile->priorities,
+        );
+    }
+
+    public function test_put_with_legacy_or_extra_keys_is_422_and_order_stays(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user, 'sanctum')
+            ->putJson('/api/v1/profile/priorities', [
+                'priorities' => ['industry'],
+            ])
+            ->assertOk();
+
+        $this->actingAs($user, 'sanctum')
+            ->putJson('/api/v1/profile/priorities', [
                 'priorities' => ['industry', 'city', 'province'],
-            ]);
-    }
-
-    public function test_put_with_reordered_priorities_persists_that_order(): void
-    {
-        $user = User::factory()->create();
-
-        $this->actingAs($user, 'sanctum')
-            ->getJson('/api/v1/profile/priorities')
-            ->assertOk();
-
-        $this->actingAs($user, 'sanctum')
-            ->putJson('/api/v1/profile/priorities', [
-                'priorities' => ['province', 'industry', 'city'],
-            ])
-            ->assertOk()
-            ->assertExactJson([
-                'priorities' => ['province', 'industry', 'city'],
-            ]);
-
-        $this->assertSame(
-            ['province', 'industry', 'city'],
-            $user->fresh()->profile->priorities,
-        );
-    }
-
-    public function test_put_with_fourth_key_or_duplicate_is_422_and_order_stays(): void
-    {
-        $user = User::factory()->create();
-
-        $this->actingAs($user, 'sanctum')
-            ->putJson('/api/v1/profile/priorities', [
-                'priorities' => ['province', 'industry', 'city'],
-            ])
-            ->assertOk();
-
-        $this->actingAs($user, 'sanctum')
-            ->putJson('/api/v1/profile/priorities', [
-                'priorities' => ['province', 'industry', 'city', 'language'],
             ])
             ->assertStatus(422)
             ->assertJsonPath('code', 'validation_failed');
 
         $this->actingAs($user, 'sanctum')
             ->putJson('/api/v1/profile/priorities', [
-                'priorities' => ['province', 'industry', 'industry'],
+                'priorities' => ['city'],
             ])
             ->assertStatus(422)
             ->assertJsonPath('code', 'validation_failed');
 
         $this->assertSame(
-            ['province', 'industry', 'city'],
+            ['industry'],
             $user->fresh()->profile->priorities,
         );
     }
@@ -100,7 +100,7 @@ class ProfilePrioritiesTest extends TestCase
 
         $this->actingAs($intruder, 'sanctum')
             ->putJson('/api/v1/profile/'.$owner->id.'/priorities', [
-                'priorities' => ['province', 'industry', 'city'],
+                'priorities' => ['industry'],
             ])
             ->assertNotFound();
     }
@@ -111,29 +111,10 @@ class ProfilePrioritiesTest extends TestCase
 
         $this->actingAs($staff, 'sanctum')
             ->putJson('/api/v1/profile/priorities', [
-                'priorities' => ['province', 'industry', 'city'],
+                'priorities' => ['industry'],
             ])
             ->assertForbidden()
             ->assertJsonPath('code', 'forbidden');
-    }
-
-    public function test_changing_put_dispatches_priorities_changed_event(): void
-    {
-        Event::fake([ProfilePrioritiesChanged::class]);
-
-        $user = User::factory()->create();
-
-        $this->actingAs($user, 'sanctum')
-            ->putJson('/api/v1/profile/priorities', [
-                'priorities' => ['province', 'industry', 'city'],
-            ])
-            ->assertOk();
-
-        Event::assertDispatched(ProfilePrioritiesChanged::class, function (ProfilePrioritiesChanged $event) use ($user): bool {
-            return $event->userId === $user->id
-                && $event->priorities === ['province', 'industry', 'city']
-                && $event::NAME === 'profile.priorities_changed';
-        });
     }
 
     public function test_identical_put_does_not_dispatch_priorities_changed_event(): void
@@ -142,7 +123,7 @@ class ProfilePrioritiesTest extends TestCase
 
         $this->actingAs($user, 'sanctum')
             ->putJson('/api/v1/profile/priorities', [
-                'priorities' => ['province', 'industry', 'city'],
+                'priorities' => ['industry'],
             ])
             ->assertOk();
 
@@ -150,13 +131,33 @@ class ProfilePrioritiesTest extends TestCase
 
         $this->actingAs($user, 'sanctum')
             ->putJson('/api/v1/profile/priorities', [
-                'priorities' => ['province', 'industry', 'city'],
+                'priorities' => ['industry'],
             ])
             ->assertOk()
             ->assertExactJson([
-                'priorities' => ['province', 'industry', 'city'],
+                'priorities' => ['industry'],
             ]);
 
         Event::assertNotDispatched(ProfilePrioritiesChanged::class);
+    }
+
+    public function test_legacy_stored_priorities_coerce_to_industry_on_get(): void
+    {
+        $user = User::factory()->create();
+        $profile = $user->ensureProfile();
+        $profile->priorities = ['province', 'industry', 'city'];
+        $profile->save();
+
+        $this->actingAs($user, 'sanctum')
+            ->getJson('/api/v1/profile/priorities')
+            ->assertOk()
+            ->assertExactJson([
+                'priorities' => ['industry'],
+            ]);
+
+        $this->assertSame(
+            ['industry'],
+            $user->fresh()->profile->priorities,
+        );
     }
 }

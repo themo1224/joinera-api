@@ -50,12 +50,12 @@ class ProfileTest extends TestCase
         $this->actingAs($user, 'sanctum')
             ->putJson('/api/v1/profile', [
                 'industry' => 'IT',
-                'city' => 'Berlin',
-                'province' => 'BE',
                 'language' => 'de',
             ])
             ->assertOk()
-            ->assertJsonPath('complete', false);
+            ->assertJsonPath('complete', false)
+            ->assertJsonMissingPath('city')
+            ->assertJsonMissingPath('province');
 
         $this->actingAs($user, 'sanctum')
             ->putJson('/api/v1/profile', [
@@ -85,8 +85,6 @@ class ProfileTest extends TestCase
         $this->actingAs($user, 'sanctum')
             ->putJson('/api/v1/profile', [
                 'industry' => 'IT',
-                'city' => 'Berlin',
-                'province' => 'BE',
                 'language' => 'de',
             ])
             ->assertOk()
@@ -135,8 +133,6 @@ class ProfileTest extends TestCase
         $this->actingAs($user, 'sanctum')
             ->putJson('/api/v1/profile', [
                 'industry' => 'IT',
-                'city' => 'Berlin',
-                'province' => 'BE',
                 'language' => 'de',
                 'education' => 'Abitur',
                 'desired_path' => 'job',
@@ -194,8 +190,6 @@ class ProfileTest extends TestCase
         $this->actingAs($user, 'sanctum')
             ->putJson('/api/v1/profile', [
                 'industry' => 'IT',
-                'city' => 'Berlin',
-                'province' => 'BE',
                 'language' => 'de',
             ])
             ->assertOk();
@@ -217,14 +211,14 @@ class ProfileTest extends TestCase
             ->getJson('/api/v1/users/'.$user->id.'/profile')
             ->assertOk()
             ->assertJsonPath('industry', ['IT'])
-            ->assertJsonPath('city', ['Berlin'])
-            ->assertJsonPath('province', ['BE'])
             ->assertJsonPath('language', 'de')
             ->assertJsonPath('education', 'Abitur')
             ->assertJsonPath('desired_path', 'ausbildung')
             ->assertJsonPath('complete', true)
             ->assertJsonPath('parse_status', 'unparsed')
             ->assertJsonPath('approval', 'pending')
+            ->assertJsonMissingPath('city')
+            ->assertJsonMissingPath('province')
             ->assertJsonMissingPath('cv')
             ->assertJsonMissingPath('path')
             ->assertJsonMissingPath('disk');
@@ -236,13 +230,15 @@ class ProfileTest extends TestCase
         $admin = User::factory()->admin()->create();
 
         $this->actingAs($user, 'sanctum')
-            ->putJson('/api/v1/profile', ['city' => 'Munich'])
+            ->putJson('/api/v1/profile', ['language' => 'de'])
             ->assertOk();
 
         $this->actingAs($admin, 'sanctum')
             ->getJson('/api/v1/users/'.$user->id.'/profile')
             ->assertOk()
-            ->assertJsonPath('city', ['Munich'])
+            ->assertJsonPath('language', 'de')
+            ->assertJsonMissingPath('city')
+            ->assertJsonMissingPath('province')
             ->assertJsonPath('complete', false);
     }
 
@@ -269,9 +265,9 @@ class ProfileTest extends TestCase
             ])
             ->assertCreated()
             ->assertJsonPath('industry', [])
-            ->assertJsonPath('city', [])
-            ->assertJsonPath('province', [])
             ->assertJsonPath('language', null)
+            ->assertJsonMissingPath('city')
+            ->assertJsonMissingPath('province')
             ->assertJsonPath('complete', false)
             ->assertJsonPath('parse_status', 'unparsed')
             ->assertJsonPath('approval', 'pending')
@@ -406,8 +402,6 @@ class ProfileTest extends TestCase
         $this->actingAs($staff, 'sanctum')
             ->putJson('/api/v1/users/'.$candidate->id.'/profile', [
                 'industry' => 'IT',
-                'city' => 'Berlin',
-                'province' => 'BE',
                 'language' => 'de',
                 'education' => 'Bachelor',
                 'desired_path' => 'job',
@@ -422,8 +416,6 @@ class ProfileTest extends TestCase
             ])
             ->assertOk()
             ->assertJsonPath('industry', ['IT'])
-            ->assertJsonPath('city', ['Berlin'])
-            ->assertJsonPath('province', ['BE'])
             ->assertJsonPath('language', 'de')
             ->assertJsonPath('education', 'Bachelor')
             ->assertJsonPath('desired_path', 'job')
@@ -431,6 +423,8 @@ class ProfileTest extends TestCase
             ->assertJsonPath('complete', true)
             ->assertJsonPath('parse_status', 'unparsed')
             ->assertJsonPath('approval', 'pending')
+            ->assertJsonMissingPath('city')
+            ->assertJsonMissingPath('province')
             ->assertJsonMissingPath('cv')
             ->assertJsonMissingPath('path')
             ->assertJsonMissingPath('disk')
@@ -440,17 +434,17 @@ class ProfileTest extends TestCase
             ->getJson('/api/v1/users/'.$candidate->id.'/profile')
             ->assertOk()
             ->assertJsonPath('industry', ['IT'])
-            ->assertJsonPath('city', ['Berlin'])
-            ->assertJsonPath('province', ['BE'])
-            ->assertJsonPath('language', 'de');
+            ->assertJsonPath('language', 'de')
+            ->assertJsonMissingPath('city')
+            ->assertJsonMissingPath('province');
 
         $this->actingAs($staff, 'sanctum')
             ->getJson('/api/v1/applicants/'.$candidate->id)
             ->assertOk()
             ->assertJsonPath('industry', ['IT'])
-            ->assertJsonPath('city', ['Berlin'])
-            ->assertJsonPath('province', ['BE'])
-            ->assertJsonPath('language', 'de');
+            ->assertJsonPath('language', 'de')
+            ->assertJsonMissingPath('city')
+            ->assertJsonMissingPath('province');
     }
 
     public function test_admin_can_update_candidate_profile_fields(): void
@@ -460,16 +454,18 @@ class ProfileTest extends TestCase
 
         $this->actingAs($admin, 'sanctum')
             ->putJson('/api/v1/users/'.$candidate->id.'/profile', [
-                'city' => 'Munich',
+                'language' => 'en',
             ])
             ->assertOk()
-            ->assertJsonPath('city', ['Munich'])
+            ->assertJsonPath('language', 'en')
+            ->assertJsonMissingPath('city')
             ->assertJsonMissingPath('password');
 
         $this->actingAs($admin, 'sanctum')
             ->getJson('/api/v1/applicants/'.$candidate->id)
             ->assertOk()
-            ->assertJsonPath('city', ['Munich']);
+            ->assertJsonPath('language', 'en')
+            ->assertJsonMissingPath('city');
     }
 
     public function test_staff_cannot_update_profile_for_staff_or_admin_target(): void
@@ -480,14 +476,14 @@ class ProfileTest extends TestCase
 
         $this->actingAs($staffActor, 'sanctum')
             ->putJson('/api/v1/users/'.$staffTarget->id.'/profile', [
-                'city' => 'Berlin',
+                'language' => 'de',
             ])
             ->assertNotFound()
             ->assertJsonPath('code', 'not_found');
 
         $this->actingAs($staffActor, 'sanctum')
             ->putJson('/api/v1/users/'.$adminTarget->id.'/profile', [
-                'city' => 'Berlin',
+                'language' => 'de',
             ])
             ->assertNotFound()
             ->assertJsonPath('code', 'not_found');
@@ -501,8 +497,6 @@ class ProfileTest extends TestCase
         $this->actingAs($staff, 'sanctum')
             ->putJson('/api/v1/users/'.$candidate->id.'/profile', [
                 'industry' => 'IT',
-                'city' => 'Berlin',
-                'province' => 'BE',
                 'language' => 'de',
             ])
             ->assertOk();
@@ -525,7 +519,7 @@ class ProfileTest extends TestCase
 
         $this->actingAs($intruder, 'sanctum')
             ->putJson('/api/v1/users/'.$owner->id.'/profile', [
-                'city' => 'Berlin',
+                'language' => 'de',
             ])
             ->assertForbidden()
             ->assertJsonPath('code', 'forbidden');

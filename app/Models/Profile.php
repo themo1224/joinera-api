@@ -42,11 +42,11 @@ class Profile extends Model
     /** @use HasFactory<ProfileFactory> */
     use HasFactory;
 
-    public const DEFAULT_PRIORITIES = ['industry', 'city', 'province'];
+    public const DEFAULT_PRIORITIES = ['industry'];
 
     public const DESIRED_PATHS = ['ausbildung', 'job', 'either'];
 
-    private const NAMED_FIELDS = ['industry', 'city', 'province', 'language'];
+    private const NAMED_FIELDS = ['industry', 'language'];
 
     /**
      * @return BelongsTo<User, $this>
@@ -134,12 +134,14 @@ class Profile extends Model
      */
     public function ensurePriorities(): array
     {
-        if ($this->priorities === null || $this->priorities === []) {
-            $this->priorities = self::DEFAULT_PRIORITIES;
+        $normalized = $this->normalizedPriorities();
+
+        if ($this->priorities !== $normalized) {
+            $this->priorities = $normalized;
             $this->save();
         }
 
-        return $this->normalizedPriorities();
+        return $normalized;
     }
 
     /**
@@ -174,16 +176,17 @@ class Profile extends Model
         /** @var list<string>|null $priorities */
         $priorities = $this->priorities;
 
-        if ($priorities === null || $priorities === []) {
+        if ($priorities === self::DEFAULT_PRIORITIES) {
             return self::DEFAULT_PRIORITIES;
         }
 
-        return array_values($priorities);
+        // Temporarily coerce legacy industry/city/province orders to industry-only.
+        return self::DEFAULT_PRIORITIES;
     }
 
     /**
      * CV is optional enrichment — completeness is structured profile fields only.
-     * Empty city/province means all locations and still counts as complete.
+     * Profile city/province are temporarily unused.
      */
     public function isComplete(?CvAsset $cvAsset = null): bool
     {
@@ -299,8 +302,6 @@ class Profile extends Model
     {
         return [
             'industry' => $this->industryList(),
-            'city' => $this->cityList(),
-            'province' => $this->provinceList(),
             'language' => $this->language,
             'education' => $this->education,
             'desired_path' => $this->desired_path,

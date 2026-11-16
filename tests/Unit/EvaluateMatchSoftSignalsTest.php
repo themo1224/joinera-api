@@ -68,18 +68,15 @@ class EvaluateMatchSoftSignalsTest extends TestCase
         $this->assertNull($result['soft_signals']);
     }
 
-    public function test_city_mismatch_flags_location(): void
+    public function test_city_mismatch_is_disabled_while_profile_location_unused(): void
     {
         $result = $this->evaluate(
             $this->profile(language: 'de', city: 'Munich', province: 'BY'),
             SoftRuleListings::make('cityBerlinPlz'),
         );
 
-        $this->assertTrue($result['has_soft_mismatch']);
-        $this->assertSame('city_mismatch', $result['soft_signals']['location']['reason']);
-        $this->assertSame('Munich', $result['soft_signals']['location']['profile_city']);
-        $this->assertSame('berlin', $result['soft_signals']['location']['listing_city_normalized']);
-        $this->assertArrayNotHasKey('language_level', $result['soft_signals']);
+        $this->assertFalse($result['has_soft_mismatch']);
+        $this->assertNull($result['soft_signals']);
     }
 
     public function test_empty_listing_city_skips_location_signal(): void

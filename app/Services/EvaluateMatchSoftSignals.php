@@ -5,13 +5,11 @@ namespace App\Services;
 use App\Models\Listing;
 use App\Models\Profile;
 use App\Support\LanguageRequirement;
-use App\Support\ListingLocation;
 
 class EvaluateMatchSoftSignals
 {
     public function __construct(
         private readonly LanguageRequirement $languageRequirement = new LanguageRequirement,
-        private readonly ListingLocation $listingLocation = new ListingLocation,
     ) {
     }
 
@@ -72,25 +70,12 @@ class EvaluateMatchSoftSignals
     }
 
     /**
+     * Profile city/province preferences are temporarily unused — no location soft signal.
+     *
      * @return array<string, mixed>|null
      */
-    private function locationSignal(Profile $profile, Listing $listing): ?array
+    private function locationSignal(Profile $_profile, Listing $_listing): ?array
     {
-        $profileCities = $profile->cityList();
-        $listingCity = is_string($listing->city) ? $listing->city : null;
-        $match = $this->listingLocation->citiesMatchAny($profileCities, $listingCity);
-
-        if ($match !== false) {
-            return null;
-        }
-
-        return [
-            'mismatch' => true,
-            'profile_city' => Profile::joinLabels($profileCities),
-            'profile_province' => Profile::joinLabels($profile->provinceList()),
-            'listing_city_raw' => $listingCity,
-            'listing_city_normalized' => $this->listingLocation->normalizeCity($listingCity),
-            'reason' => 'city_mismatch',
-        ];
+        return null;
     }
 }

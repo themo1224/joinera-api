@@ -38,8 +38,6 @@ class BuildApplicantDirectoryItem
             'name' => $user->name,
             'email' => $user->email,
             'industry' => $profile?->industryList() ?? [],
-            'city' => $profile?->cityList() ?? [],
-            'province' => $profile?->provinceList() ?? [],
             'language' => (string) ($profile?->language ?? ''),
             'education' => (string) ($profile?->education ?? ''),
             'desiredPath' => (string) ($profile?->desired_path ?? ''),

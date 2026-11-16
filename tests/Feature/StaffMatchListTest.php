@@ -32,9 +32,9 @@ class StaffMatchListTest extends TestCase
             ->for($listing)
             ->hardSkip(MatchHardSkipReason::Industry)
             ->withSoftSignals([
-                'location' => [
+                'language_level' => [
                     'mismatch' => true,
-                    'reason' => 'city_mismatch',
+                    'reason' => 'language_code_mismatch',
                 ],
             ])
             ->create();
@@ -51,7 +51,7 @@ class StaffMatchListTest extends TestCase
             ->assertJsonPath('total', 1)
             ->assertJsonPath('matches.0.status', 'skipped')
             ->assertJsonPath('matches.0.hardSkipReason', 'industry')
-            ->assertJsonPath('matches.0.softSignals.location.reason', 'city_mismatch')
+            ->assertJsonPath('matches.0.softSignals.language_level.reason', 'language_code_mismatch')
             ->assertJsonPath('matches.0.listingTitle', 'Skipped Job')
             ->assertJsonPath('matches.0.listingSource', 'azubiyo')
             ->assertJsonPath('matches.0.userName', 'Ops Candidate')

@@ -45,7 +45,7 @@ class StoreMatchSoftSignalsTest extends TestCase
         $this->assertSame(MatchHardSkipReason::Industry, $stored->hard_skip_reason);
         $this->assertIsArray($stored->soft_signals);
         $this->assertSame('language_code_mismatch', $stored->soft_signals['language_level']['reason']);
-        $this->assertSame('city_mismatch', $stored->soft_signals['location']['reason']);
+        $this->assertArrayNotHasKey('location', $stored->soft_signals);
     }
 
     public function test_clean_pair_stores_null_soft_signals(): void

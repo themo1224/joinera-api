@@ -32,12 +32,12 @@ class ProfileParseTest extends TestCase
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/v1/profile/parse')
             ->assertOk()
-            ->assertJsonPath('industry', 'IT')
-            ->assertJsonPath('city', 'Berlin')
-            ->assertJsonPath('province', 'BE')
+            ->assertJsonPath('industry', ['IT'])
             ->assertJsonPath('language', 'de')
             ->assertJsonPath('parse_status', 'parsed')
-            ->assertJsonPath('complete', false);
+            ->assertJsonPath('complete', false)
+            ->assertJsonMissingPath('city')
+            ->assertJsonMissingPath('province');
 
         $this->actingAs($user, 'sanctum')
             ->getJson('/api/v1/profile')
@@ -72,11 +72,11 @@ class ProfileParseTest extends TestCase
         $this->actingAs($user, 'sanctum')
             ->getJson('/api/v1/profile')
             ->assertOk()
-            ->assertJsonPath('industry', 'Nursing')
+            ->assertJsonPath('industry', ['Nursing'])
             ->assertJsonPath('parse_status', 'parse_failed');
     }
 
-    public function test_user_edited_city_is_not_overwritten_by_second_parse(): void
+    public function test_user_edited_language_is_not_overwritten_by_second_parse(): void
     {
         Storage::fake(CvStorage::DISK);
         $user = User::factory()->create();
@@ -90,14 +90,10 @@ class ProfileParseTest extends TestCase
         $this->swap(CvParser::class, new FakeCvParser([
             new CvParseResult(
                 industry: 'IT',
-                city: 'Berlin',
-                province: 'BE',
                 language: 'de',
             ),
             new CvParseResult(
                 industry: 'Healthcare',
-                city: 'Hamburg',
-                province: 'HH',
                 language: 'en',
             ),
         ]));
@@ -105,22 +101,22 @@ class ProfileParseTest extends TestCase
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/v1/profile/parse')
             ->assertOk()
-            ->assertJsonPath('city', 'Berlin')
+            ->assertJsonPath('language', 'de')
             ->assertJsonPath('parse_status', 'parsed');
 
         $this->actingAs($user, 'sanctum')
-            ->putJson('/api/v1/profile', ['city' => 'Munich'])
+            ->putJson('/api/v1/profile', ['language' => 'fr'])
             ->assertOk()
-            ->assertJsonPath('city', 'Munich');
+            ->assertJsonPath('language', 'fr');
 
         $this->actingAs($user, 'sanctum')
             ->postJson('/api/v1/profile/parse')
             ->assertOk()
-            ->assertJsonPath('city', 'Munich')
-            ->assertJsonPath('industry', 'Healthcare')
-            ->assertJsonPath('province', 'HH')
-            ->assertJsonPath('language', 'en')
-            ->assertJsonPath('parse_status', 'parsed');
+            ->assertJsonPath('language', 'fr')
+            ->assertJsonPath('industry', ['Healthcare'])
+            ->assertJsonPath('parse_status', 'parsed')
+            ->assertJsonMissingPath('city')
+            ->assertJsonMissingPath('province');
     }
 
     public function test_user_with_no_cv_gets_422_and_no_parse_status_change(): void

@@ -72,6 +72,8 @@ class RenderCleanA4SplitHtmlTest extends TestCase
         $this->assertStringContainsString('footer-bar', $html);
         $this->assertStringContainsString('#C9A227', $html);
         $this->assertStringNotContainsString('<h1>Lebenslauf</h1>', $html);
+        // Profile preference city/province are temporarily unused in contact chrome.
+        $this->assertStringNotContainsString('Berlin, Berlin', $html);
     }
 
     public function test_cover_html_includes_recipient_and_body(): void

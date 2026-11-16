@@ -15,7 +15,7 @@ use Illuminate\Http\Request;
 
 class StaffProfileController extends Controller
 {
-    private const MATCH_INPUT_FIELDS = ['industry', 'city', 'province', 'language', 'education', 'desired_path'];
+    private const MATCH_INPUT_FIELDS = ['industry', 'language', 'education', 'desired_path'];
 
     public function __construct(private readonly CvStorage $cvStorage) {}
 

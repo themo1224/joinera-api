@@ -46,7 +46,7 @@ class ProfileApprovalTest extends TestCase
             ->assertJsonPath('approval', 'approved');
     }
 
-    public function test_later_put_of_city_leaves_approval_approved(): void
+    public function test_later_put_of_language_leaves_approval_approved(): void
     {
         Storage::fake(CvStorage::DISK);
         $user = User::factory()->create();
@@ -59,10 +59,12 @@ class ProfileApprovalTest extends TestCase
             ->assertOk();
 
         $this->actingAs($user, 'sanctum')
-            ->putJson('/api/v1/profile', ['city' => 'Munich'])
+            ->putJson('/api/v1/profile', ['language' => 'en'])
             ->assertOk()
-            ->assertJsonPath('city', 'Munich')
-            ->assertJsonPath('approval', 'approved');
+            ->assertJsonPath('language', 'en')
+            ->assertJsonPath('approval', 'approved')
+            ->assertJsonMissingPath('city')
+            ->assertJsonMissingPath('province');
     }
 
     public function test_user_cannot_approve_themselves(): void
@@ -143,8 +145,6 @@ class ProfileApprovalTest extends TestCase
         $this->actingAs($user, 'sanctum')
             ->putJson('/api/v1/profile', [
                 'industry' => 'IT',
-                'city' => 'Berlin',
-                'province' => 'BE',
                 'language' => 'de',
                 'education' => 'Abitur',
                 'desired_path' => 'ausbildung',

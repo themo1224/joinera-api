@@ -182,7 +182,7 @@ class MatchRunnerTest extends TestCase
     {
         Queue::fake();
 
-        ProfilePrioritiesChanged::dispatch(7, ['city', 'industry', 'province']);
+        ProfilePrioritiesChanged::dispatch(7, ['industry']);
 
         Queue::assertPushedOn('match', RematchCandidateJob::class, function (RematchCandidateJob $job): bool {
             return $job->userId === 7;

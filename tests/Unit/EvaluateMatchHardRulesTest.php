@@ -66,6 +66,48 @@ class EvaluateMatchHardRulesTest extends TestCase
         $this->assertNull($result['hard_skip_reason']);
     }
 
+    public function test_industry_synonym_matches_same_family(): void
+    {
+        $listing = HardRuleListings::make('passAll');
+        $listing->category = 'Pflegefachkraft';
+
+        $result = $this->evaluate(
+            $this->profile(industry: 'Altenpflegerin'),
+            $listing,
+        );
+
+        $this->assertTrue($result['eligible']);
+        $this->assertNull($result['hard_skip_reason']);
+    }
+
+    public function test_specialization_slug_matches_family(): void
+    {
+        $listing = HardRuleListings::make('passAll');
+        $listing->category = 'Altenpfleger';
+
+        $result = $this->evaluate(
+            $this->profile(industry: 'altenpflege'),
+            $listing,
+        );
+
+        $this->assertTrue($result['eligible']);
+        $this->assertNull($result['hard_skip_reason']);
+    }
+
+    public function test_industry_different_families_still_fail(): void
+    {
+        $listing = HardRuleListings::make('passAll');
+        $listing->category = 'MFA';
+
+        $result = $this->evaluate(
+            $this->profile(industry: 'Altenpflegerin'),
+            $listing,
+        );
+
+        $this->assertFalse($result['eligible']);
+        $this->assertSame(MatchHardSkipReason::Industry, $result['hard_skip_reason']);
+    }
+
     public function test_non_germany_fails_e(): void
     {
         $result = $this->evaluate(

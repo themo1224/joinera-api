@@ -6,6 +6,7 @@ use App\Enums\MatchHardSkipReason;
 use App\Models\Listing;
 use App\Models\Profile;
 use App\Support\EducationRequirement;
+use App\Support\IndustryTaxonomy;
 
 class EvaluateMatchHardRules
 {
@@ -42,8 +43,12 @@ class EvaluateMatchHardRules
         $industries = [];
         foreach ($profile->industryList() as $label) {
             $normalized = $this->normalizeLabel($label);
-            if ($normalized !== null) {
-                $industries[] = $normalized;
+            if ($normalized === null) {
+                continue;
+            }
+            $family = IndustryTaxonomy::familyKey($normalized);
+            if ($family !== null) {
+                $industries[] = $family;
             }
         }
 
@@ -53,7 +58,9 @@ class EvaluateMatchHardRules
             return false;
         }
 
-        return ! in_array($category, $industries, true);
+        $categoryFamily = IndustryTaxonomy::familyKey($category);
+
+        return $categoryFamily === null || ! in_array($categoryFamily, $industries, true);
     }
 
     private function failsGermany(Listing $listing): bool

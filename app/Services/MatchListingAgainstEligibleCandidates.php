@@ -7,14 +7,14 @@ use App\Enums\MailboxState;
 use App\Enums\Role;
 use App\Models\Listing;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 
 class MatchListingAgainstEligibleCandidates
 {
     public function __construct(
         private readonly ResolveCandidateEligibility $eligibility,
         private readonly UpsertCandidateListingMatch $upsertMatch,
-    ) {
-    }
+    ) {}
 
     public function handle(Listing $listing): void
     {
@@ -33,7 +33,7 @@ class MatchListingAgainstEligibleCandidates
     /**
      * Coarse prefilter; ResolveCandidateEligibility is the final gate.
      *
-     * @return \Illuminate\Database\Eloquent\Builder<User>
+     * @return Builder<User>
      */
     private function candidateQuery()
     {
@@ -48,9 +48,12 @@ class MatchListingAgainstEligibleCandidates
                     ->whereNotNull('province')
                     ->where('province', '!=', '')
                     ->whereNotNull('language')
-                    ->where('language', '!=', '');
+                    ->where('language', '!=', '')
+                    ->whereNotNull('education')
+                    ->where('education', '!=', '')
+                    ->whereNotNull('desired_path')
+                    ->where('desired_path', '!=', '');
             })
-            ->whereHas('cvAsset')
             ->whereHas('mailboxIdentity', function ($query): void {
                 $query->where('state', MailboxState::Ready);
             })

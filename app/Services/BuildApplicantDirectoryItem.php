@@ -12,34 +12,10 @@ class BuildApplicantDirectoryItem
     public function __construct(
         private readonly ResolveIdentityReadiness $readiness,
         private readonly ResolveCandidateEligibility $eligibility,
-    ) {
-    }
+    ) {}
 
     /**
-     * @return array{
-     *     id: int,
-     *     name: string,
-     *     email: string|null,
-     *     industry: string,
-     *     city: string,
-     *     province: string,
-     *     language: string,
-     *     hasCv: bool,
-     *     profileComplete: bool,
-     *     approval: string,
-     *     approvedById: string|null,
-     *     approvedByEmail: string|null,
-     *     approvedAt: string|null,
-     *     readiness: string,
-     *     matchEligible: bool,
-     *     matchEligibilityReasons: list<string>,
-     *     mailboxState: string,
-     *     mailboxDomain: string|null,
-     *     mailboxAddress: string|null,
-     *     mailboxLastSyncedAt: string|null,
-     *     mailboxSyncError: string|null,
-     *     createdAt: string
-     * }
+     * @return array<string, mixed>
      */
     public function handle(User $user): array
     {
@@ -65,6 +41,18 @@ class BuildApplicantDirectoryItem
             'city' => (string) ($profile?->city ?? ''),
             'province' => (string) ($profile?->province ?? ''),
             'language' => (string) ($profile?->language ?? ''),
+            'education' => (string) ($profile?->education ?? ''),
+            'desiredPath' => (string) ($profile?->desired_path ?? ''),
+            'preferredOccupation' => (string) ($profile?->preferred_occupation ?? ''),
+            'availableFrom' => $profile?->available_from?->format('Y-m-d'),
+            'willingToRelocate' => $profile?->willing_to_relocate,
+            'educationEntries' => $profile?->education_entries ?? [],
+            'experiences' => $profile?->experiences ?? [],
+            'skills' => $profile?->skills ?? [],
+            'languages' => $profile?->languages ?? [],
+            'drivingLicenses' => $profile?->driving_licenses ?? [],
+            'workResidenceNote' => (string) ($profile?->work_residence_note ?? ''),
+            'about' => (string) ($profile?->about ?? ''),
             'hasCv' => $user->cvAsset !== null,
             'profileComplete' => $profile?->isComplete($user->cvAsset) ?? false,
             'approval' => $approval,
@@ -78,7 +66,7 @@ class BuildApplicantDirectoryItem
             'mailboxDomain' => $mailbox?->domain,
             'mailboxAddress' => $mailbox?->address,
             'mailboxLastSyncedAt' => $mailbox?->last_synced_at?->toISOString(),
-            'mailboxSyncError' => $mailbox?->last_sync_error,
+            'mailboxLastSyncError' => $mailbox?->last_sync_error,
             'createdAt' => $user->created_at?->toISOString() ?? now()->toISOString(),
         ];
     }

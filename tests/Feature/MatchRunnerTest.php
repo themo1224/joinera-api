@@ -284,7 +284,8 @@ class MatchRunnerTest extends TestCase
             'city' => $complete ? $city : null,
             'province' => $complete ? 'BE' : null,
             'language' => $complete ? $language : null,
-            'education' => $education,
+            'education' => $complete ? ($education ?? 'Abitur') : $education,
+            'desired_path' => $complete ? 'ausbildung' : null,
         ]);
 
         if ($approved) {

@@ -37,7 +37,7 @@ class ProfileParseTest extends TestCase
             ->assertJsonPath('province', 'BE')
             ->assertJsonPath('language', 'de')
             ->assertJsonPath('parse_status', 'parsed')
-            ->assertJsonPath('complete', true);
+            ->assertJsonPath('complete', false);
 
         $this->actingAs($user, 'sanctum')
             ->getJson('/api/v1/profile')

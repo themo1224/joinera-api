@@ -294,6 +294,8 @@ class CreateQueuedApplicationFromMatchTest extends TestCase
             'city' => $city,
             'province' => 'BE',
             'language' => $language,
+            'education' => 'Abitur',
+            'desired_path' => 'ausbildung',
         ]);
         $profile->approval = ApprovalStatus::Approved;
         $profile->approved_by = $approver->id;

@@ -79,15 +79,15 @@ class CandidateEligibilityTest extends TestCase
         $this->assertSame(['profile_incomplete'], $result['reasons']);
     }
 
-    public function test_missing_cv_is_not_eligible(): void
+    public function test_missing_cv_with_complete_profile_is_eligible(): void
     {
         $staff = User::factory()->staff()->create();
         $applicant = $this->createEligibleApplicant($staff, withCv: false);
 
         $result = app(ResolveCandidateEligibility::class)->handle($applicant->fresh());
 
-        $this->assertFalse($result['eligible']);
-        $this->assertSame(['profile_incomplete'], $result['reasons']);
+        $this->assertTrue($result['eligible']);
+        $this->assertSame([], $result['reasons']);
     }
 
     public function test_mailbox_not_ready_is_not_eligible(): void
@@ -165,6 +165,8 @@ class CandidateEligibilityTest extends TestCase
             'city' => $complete ? 'Berlin' : null,
             'province' => $complete ? 'BE' : null,
             'language' => $complete ? 'de' : null,
+            'education' => $complete ? 'Abitur' : null,
+            'desired_path' => $complete ? 'ausbildung' : null,
         ]);
 
         if ($approved) {

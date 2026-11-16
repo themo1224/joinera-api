@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Enums\MatchHardSkipReason;
+use App\Models\Listing;
 use App\Models\Profile;
 use App\Services\EvaluateMatchHardRules;
 use Tests\Fixtures\Match\HardRuleListings;
@@ -109,6 +110,34 @@ class EvaluateMatchHardRulesTest extends TestCase
         $this->assertNull($result['hard_skip_reason']);
     }
 
+    public function test_beliebig_education_requirement_passes_like_null(): void
+    {
+        $listing = HardRuleListings::make('noEducationReq');
+        $listing->education_requirement = 'beliebig';
+
+        $result = $this->evaluate(
+            $this->profile(industry: 'IT', education: null),
+            $listing,
+        );
+
+        $this->assertTrue($result['eligible']);
+        $this->assertNull($result['hard_skip_reason']);
+    }
+
+    public function test_master_satisfies_fachabitur_requirement(): void
+    {
+        $listing = HardRuleListings::make('requiresAbitur');
+        $listing->education_requirement = 'Fachabitur';
+
+        $result = $this->evaluate(
+            $this->profile(industry: 'IT', education: 'Master'),
+            $listing,
+        );
+
+        $this->assertTrue($result['eligible']);
+        $this->assertNull($result['hard_skip_reason']);
+    }
+
     public function test_language_and_city_do_not_hard_skip(): void
     {
         $profile = $this->profile(
@@ -143,7 +172,7 @@ class EvaluateMatchHardRulesTest extends TestCase
     /**
      * @return array{eligible: bool, hard_skip_reason: ?MatchHardSkipReason}
      */
-    private function evaluate(Profile $profile, \App\Models\Listing $listing): array
+    private function evaluate(Profile $profile, Listing $listing): array
     {
         return (new EvaluateMatchHardRules)->handle($profile, $listing);
     }

@@ -43,7 +43,41 @@ class ProfileTest extends TestCase
         $this->assertDatabaseCount('cv_assets', 1);
     }
 
-    public function test_pdf_cv_plus_all_four_fields_makes_completeness_true(): void
+    public function test_structured_fields_without_cv_make_completeness_true(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user, 'sanctum')
+            ->putJson('/api/v1/profile', [
+                'industry' => 'IT',
+                'city' => 'Berlin',
+                'province' => 'BE',
+                'language' => 'de',
+            ])
+            ->assertOk()
+            ->assertJsonPath('complete', false);
+
+        $this->actingAs($user, 'sanctum')
+            ->putJson('/api/v1/profile', [
+                'education' => 'Abitur',
+                'desired_path' => 'ausbildung',
+                'skills' => [
+                    ['name' => 'Python', 'level' => 'good'],
+                ],
+                'languages' => [
+                    ['language' => 'Deutsch', 'level' => 'B2'],
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonPath('complete', true)
+            ->assertJsonPath('education', 'Abitur')
+            ->assertJsonPath('desired_path', 'ausbildung')
+            ->assertJsonPath('skills.0.name', 'Python')
+            ->assertJsonPath('languages.0.language', 'Deutsch')
+            ->assertJsonPath('cv', null);
+    }
+
+    public function test_pdf_cv_plus_all_four_fields_still_incomplete_without_education_and_path(): void
     {
         Storage::fake(CvStorage::DISK);
         $user = User::factory()->create();
@@ -63,20 +97,9 @@ class ProfileTest extends TestCase
                 'cv' => UploadedFile::fake()->create('resume.pdf', 200, 'application/pdf'),
             ])
             ->assertCreated()
-            ->assertExactJson([
-                'industry' => 'IT',
-                'city' => 'Berlin',
-                'province' => 'BE',
-                'language' => 'de',
-                'complete' => true,
-                'parse_status' => 'unparsed',
-                'approval' => 'pending',
-                'cv' => [
-                    'original_name' => 'resume.pdf',
-                    'mime' => 'application/pdf',
-                    'size' => 200 * 1024,
-                ],
-            ]);
+            ->assertJsonPath('complete', false)
+            ->assertJsonPath('cv.original_name', 'resume.pdf')
+            ->assertJsonPath('cv.mime', 'application/pdf');
     }
 
     public function test_non_pdf_upload_is_422_and_stores_nothing(): void
@@ -107,7 +130,6 @@ class ProfileTest extends TestCase
 
     public function test_empty_language_on_complete_profile_is_422_and_old_language_remains(): void
     {
-        Storage::fake(CvStorage::DISK);
         $user = User::factory()->create();
 
         $this->actingAs($user, 'sanctum')
@@ -116,14 +138,10 @@ class ProfileTest extends TestCase
                 'city' => 'Berlin',
                 'province' => 'BE',
                 'language' => 'de',
+                'education' => 'Abitur',
+                'desired_path' => 'job',
             ])
-            ->assertOk();
-
-        $this->actingAs($user, 'sanctum')
-            ->post('/api/v1/profile/cv', [
-                'cv' => UploadedFile::fake()->create('cv.pdf', 100, 'application/pdf'),
-            ])
-            ->assertCreated()
+            ->assertOk()
             ->assertJsonPath('complete', true);
 
         $this->actingAs($user, 'sanctum')
@@ -188,18 +206,25 @@ class ProfileTest extends TestCase
             ])
             ->assertCreated();
 
+        $this->actingAs($user, 'sanctum')
+            ->putJson('/api/v1/profile', [
+                'education' => 'Abitur',
+                'desired_path' => 'ausbildung',
+            ])
+            ->assertOk();
+
         $this->actingAs($staff, 'sanctum')
             ->getJson('/api/v1/users/'.$user->id.'/profile')
             ->assertOk()
-            ->assertExactJson([
-                'industry' => 'IT',
-                'city' => 'Berlin',
-                'province' => 'BE',
-                'language' => 'de',
-                'complete' => true,
-                'parse_status' => 'unparsed',
-                'approval' => 'pending',
-            ])
+            ->assertJsonPath('industry', 'IT')
+            ->assertJsonPath('city', 'Berlin')
+            ->assertJsonPath('province', 'BE')
+            ->assertJsonPath('language', 'de')
+            ->assertJsonPath('education', 'Abitur')
+            ->assertJsonPath('desired_path', 'ausbildung')
+            ->assertJsonPath('complete', true)
+            ->assertJsonPath('parse_status', 'unparsed')
+            ->assertJsonPath('approval', 'pending')
             ->assertJsonMissingPath('cv')
             ->assertJsonMissingPath('path')
             ->assertJsonMissingPath('disk');
@@ -243,15 +268,13 @@ class ProfileTest extends TestCase
                 'cv' => UploadedFile::fake()->create('cv.pdf', 100, 'application/pdf'),
             ])
             ->assertCreated()
-            ->assertExactJson([
-                'industry' => null,
-                'city' => null,
-                'province' => null,
-                'language' => null,
-                'complete' => false,
-                'parse_status' => 'unparsed',
-                'approval' => 'pending',
-            ])
+            ->assertJsonPath('industry', null)
+            ->assertJsonPath('city', null)
+            ->assertJsonPath('province', null)
+            ->assertJsonPath('language', null)
+            ->assertJsonPath('complete', false)
+            ->assertJsonPath('parse_status', 'unparsed')
+            ->assertJsonPath('approval', 'pending')
             ->assertJsonMissingPath('cv')
             ->assertJsonMissingPath('path')
             ->assertJsonMissingPath('disk');
@@ -386,17 +409,28 @@ class ProfileTest extends TestCase
                 'city' => 'Berlin',
                 'province' => 'BE',
                 'language' => 'de',
+                'education' => 'Bachelor',
+                'desired_path' => 'job',
+                'experiences' => [
+                    [
+                        'title' => 'Werkstudent',
+                        'organization' => 'Acme',
+                        'current' => true,
+                        'description' => 'Support',
+                    ],
+                ],
             ])
             ->assertOk()
-            ->assertExactJson([
-                'industry' => 'IT',
-                'city' => 'Berlin',
-                'province' => 'BE',
-                'language' => 'de',
-                'complete' => false,
-                'parse_status' => 'unparsed',
-                'approval' => 'pending',
-            ])
+            ->assertJsonPath('industry', 'IT')
+            ->assertJsonPath('city', 'Berlin')
+            ->assertJsonPath('province', 'BE')
+            ->assertJsonPath('language', 'de')
+            ->assertJsonPath('education', 'Bachelor')
+            ->assertJsonPath('desired_path', 'job')
+            ->assertJsonPath('experiences.0.title', 'Werkstudent')
+            ->assertJsonPath('complete', true)
+            ->assertJsonPath('parse_status', 'unparsed')
+            ->assertJsonPath('approval', 'pending')
             ->assertJsonMissingPath('cv')
             ->assertJsonMissingPath('path')
             ->assertJsonMissingPath('disk')

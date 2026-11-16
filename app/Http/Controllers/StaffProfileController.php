@@ -15,11 +15,9 @@ use Illuminate\Http\Request;
 
 class StaffProfileController extends Controller
 {
-    private const MATCH_INPUT_FIELDS = ['industry', 'city', 'province', 'language', 'education'];
+    private const MATCH_INPUT_FIELDS = ['industry', 'city', 'province', 'language', 'education', 'desired_path'];
 
-    public function __construct(private readonly CvStorage $cvStorage)
-    {
-    }
+    public function __construct(private readonly CvStorage $cvStorage) {}
 
     public function show(User $user): JsonResponse
     {
@@ -44,6 +42,7 @@ class StaffProfileController extends Controller
         if ($fields !== []) {
             $before = $this->matchInputSnapshot($profile);
             $profile->fill($fields);
+            $profile->syncEducationFromEntriesIfEmpty();
             $profile->markFieldsEdited(array_keys($fields));
             $profile->save();
 

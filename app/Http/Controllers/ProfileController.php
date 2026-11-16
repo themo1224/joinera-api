@@ -10,7 +10,7 @@ use Illuminate\Http\Request;
 
 class ProfileController extends Controller
 {
-    private const MATCH_INPUT_FIELDS = ['industry', 'city', 'province', 'language', 'education'];
+    private const MATCH_INPUT_FIELDS = ['industry', 'city', 'province', 'language', 'education', 'desired_path'];
 
     public function show(Request $request): JsonResponse
     {
@@ -30,6 +30,7 @@ class ProfileController extends Controller
         if ($fields !== []) {
             $before = $this->matchInputSnapshot($profile);
             $profile->fill($fields);
+            $profile->syncEducationFromEntriesIfEmpty();
             $profile->markFieldsEdited(array_keys($fields));
             $profile->save();
 

@@ -4,19 +4,46 @@ namespace App\Models;
 
 use App\Enums\ApprovalStatus;
 use App\Enums\ParseStatus;
+use App\Support\EducationRequirement;
 use Database\Factories\ProfileFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['user_id', 'industry', 'city', 'province', 'language', 'education', 'parse_status', 'user_edited_fields', 'priorities', 'approval', 'approved_by', 'approved_at'])]
+#[Fillable([
+    'user_id',
+    'industry',
+    'city',
+    'province',
+    'language',
+    'education',
+    'desired_path',
+    'preferred_occupation',
+    'available_from',
+    'willing_to_relocate',
+    'education_entries',
+    'experiences',
+    'skills',
+    'languages',
+    'driving_licenses',
+    'work_residence_note',
+    'about',
+    'parse_status',
+    'user_edited_fields',
+    'priorities',
+    'approval',
+    'approved_by',
+    'approved_at',
+])]
 class Profile extends Model
 {
     /** @use HasFactory<ProfileFactory> */
     use HasFactory;
 
     public const DEFAULT_PRIORITIES = ['industry', 'city', 'province'];
+
+    public const DESIRED_PATHS = ['ausbildung', 'job', 'either'];
 
     private const NAMED_FIELDS = ['industry', 'city', 'province', 'language'];
 
@@ -39,6 +66,13 @@ class Profile extends Model
             'priorities' => 'array',
             'approval' => ApprovalStatus::class,
             'approved_at' => 'datetime',
+            'available_from' => 'date',
+            'willing_to_relocate' => 'boolean',
+            'education_entries' => 'array',
+            'experiences' => 'array',
+            'skills' => 'array',
+            'languages' => 'array',
+            'driving_licenses' => 'array',
         ];
     }
 
@@ -114,15 +148,56 @@ class Profile extends Model
         return array_values($priorities);
     }
 
+    /**
+     * CV is optional enrichment — completeness is structured profile fields only.
+     */
     public function isComplete(?CvAsset $cvAsset = null): bool
     {
-        $cvAsset ??= $this->user?->cvAsset;
-
-        return $cvAsset !== null
-            && $this->isFilled($this->industry)
+        return $this->isFilled($this->industry)
             && $this->isFilled($this->city)
             && $this->isFilled($this->province)
-            && $this->isFilled($this->language);
+            && $this->isFilled($this->language)
+            && $this->isFilled($this->education)
+            && $this->isFilled($this->desired_path);
+    }
+
+    /**
+     * When scalar education is empty, sync from the highest-ranked education entry level.
+     */
+    public function syncEducationFromEntriesIfEmpty(): void
+    {
+        if ($this->isFilled($this->education)) {
+            return;
+        }
+
+        $highest = $this->highestEducationEntryLevel();
+        if ($highest !== null) {
+            $this->education = $highest;
+        }
+    }
+
+    public function highestEducationEntryLevel(): ?string
+    {
+        $entries = is_array($this->education_entries) ? $this->education_entries : [];
+        $ranks = new EducationRequirement;
+        $bestLevel = null;
+        $bestRank = 0;
+
+        foreach ($entries as $entry) {
+            if (! is_array($entry)) {
+                continue;
+            }
+            $level = isset($entry['level']) && is_string($entry['level']) ? $entry['level'] : null;
+            $rank = $ranks->rank($level);
+            if ($rank !== null && $rank > $bestRank) {
+                $bestRank = $rank;
+                $bestLevel = trim($level ?? '');
+            } elseif ($rank === null && $bestLevel === null && $this->isFilled($level)) {
+                $bestLevel = trim((string) $level);
+            }
+        }
+
+        return $this->isFilled($bestLevel) ? $bestLevel : null;
     }
 
     /**
@@ -161,16 +236,7 @@ class Profile extends Model
     }
 
     /**
-     * @return array{
-     *     industry: string|null,
-     *     city: string|null,
-     *     province: string|null,
-     *     language: string|null,
-     *     complete: bool,
-     *     parse_status: string,
-     *     approval: string,
-     *     cv: array{original_name: string, mime: string, size: int}|null
-     * }
+     * @return array<string, mixed>
      */
     public function toOwnerArray(?CvAsset $cvAsset = null): array
     {
@@ -187,15 +253,7 @@ class Profile extends Model
     }
 
     /**
-     * @return array{
-     *     industry: string|null,
-     *     city: string|null,
-     *     province: string|null,
-     *     language: string|null,
-     *     complete: bool,
-     *     parse_status: string,
-     *     approval: string
-     * }
+     * @return array<string, mixed>
      */
     public function toStaffArray(?CvAsset $cvAsset = null): array
     {
@@ -203,15 +261,7 @@ class Profile extends Model
     }
 
     /**
-     * @return array{
-     *     industry: string|null,
-     *     city: string|null,
-     *     province: string|null,
-     *     language: string|null,
-     *     complete: bool,
-     *     parse_status: string,
-     *     approval: string
-     * }
+     * @return array<string, mixed>
      */
     private function toFieldArray(?CvAsset $cvAsset): array
     {
@@ -220,6 +270,18 @@ class Profile extends Model
             'city' => $this->city,
             'province' => $this->province,
             'language' => $this->language,
+            'education' => $this->education,
+            'desired_path' => $this->desired_path,
+            'preferred_occupation' => $this->preferred_occupation,
+            'available_from' => $this->available_from?->format('Y-m-d'),
+            'willing_to_relocate' => $this->willing_to_relocate,
+            'education_entries' => $this->education_entries ?? [],
+            'experiences' => $this->experiences ?? [],
+            'skills' => $this->skills ?? [],
+            'languages' => $this->languages ?? [],
+            'driving_licenses' => $this->driving_licenses ?? [],
+            'work_residence_note' => $this->work_residence_note,
+            'about' => $this->about,
             'complete' => $this->isComplete($cvAsset),
             'parse_status' => ($this->parse_status ?? ParseStatus::Unparsed)->value,
             'approval' => ($this->approval ?? ApprovalStatus::Pending)->value,

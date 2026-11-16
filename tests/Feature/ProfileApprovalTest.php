@@ -6,7 +6,6 @@ use App\Enums\ApprovalStatus;
 use App\Models\User;
 use App\Services\CvStorage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -147,13 +146,9 @@ class ProfileApprovalTest extends TestCase
                 'city' => 'Berlin',
                 'province' => 'BE',
                 'language' => 'de',
+                'education' => 'Abitur',
+                'desired_path' => 'ausbildung',
             ])
             ->assertOk();
-
-        $this->actingAs($user, 'sanctum')
-            ->post('/api/v1/profile/cv', [
-                'cv' => UploadedFile::fake()->create('cv.pdf', 100, 'application/pdf'),
-            ])
-            ->assertCreated();
     }
 }

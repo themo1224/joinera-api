@@ -12,8 +12,9 @@ return [
         ))),
         'imap' => [
             'host' => env('JOINERA_GMX_IMAP_HOST', 'imap.gmx.net'),
-            'port' => (int) env('JOINERA_GMX_IMAP_PORT', 993),
-            'encryption' => env('JOINERA_GMX_IMAP_ENCRYPTION', 'ssl'),
+            // 143 + STARTTLS: implicit SSL on 993 is commonly blocked on Windows/VPN setups.
+            'port' => (int) env('JOINERA_GMX_IMAP_PORT', 143),
+            'encryption' => env('JOINERA_GMX_IMAP_ENCRYPTION', 'starttls'),
         ],
         'smtp' => [
             'host' => env('JOINERA_GMX_SMTP_HOST', 'mail.gmx.net'),

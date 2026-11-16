@@ -25,8 +25,7 @@ class StaffMailboxController extends Controller
         private readonly AttachGmxMailbox $attachGmxMailbox,
         private readonly ReplyMailboxMessage $replyMailboxMessage,
         private readonly MailboxInboundSync $inboundSync,
-    ) {
-    }
+    ) {}
 
     public function show(User $user): JsonResponse
     {
@@ -136,9 +135,18 @@ class StaffMailboxController extends Controller
         }
 
         if ($result->error !== null) {
+            $detail = $result->detail;
+            $message = 'GMX IMAP sync failed.';
+            if (is_string($detail) && $detail !== '') {
+                if (str_contains($detail, '993') || str_contains($detail, 'STARTTLS') || str_contains($detail, 'TLS')) {
+                    $message = 'GMX IMAP network/TLS failed. Check outbound access to imap.gmx.net (143 STARTTLS / 993 SSL) and VPN/firewall/proxy.';
+                }
+            }
+
             return response()->json(array_merge([
                 'code' => 'gmx_sync_failed',
-                'message' => 'GMX IMAP sync failed.',
+                'message' => $message,
+                'detail' => $detail,
                 'upserted' => 0,
             ], $fresh?->toPublicArray() ?? []), 422);
         }

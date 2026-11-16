@@ -3,6 +3,7 @@
 namespace App\Services\Gmx;
 
 use App\Exceptions\MailboxAuthFailedException;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
@@ -16,31 +17,171 @@ class MinimalImapClient
      */
     public function connect(string $host, int $port, string $encryption)
     {
-        $scheme = $encryption === 'ssl' || $encryption === 'tls' ? 'ssl' : 'tcp';
-        $remote = sprintf('%s://%s:%d', $scheme, $host, $port);
+        $encryption = strtolower(trim($encryption));
+        $errors = [];
 
+        // Implicit SSL (993) is often blocked by local firewalls/VPNs; fall back to STARTTLS on 143.
+        if (in_array($encryption, ['ssl', 'tls'], true)) {
+            try {
+                return $this->connectImplicitSsl($host, $port > 0 ? $port : 993);
+            } catch (RuntimeException $exception) {
+                $errors[] = $exception->getMessage();
+                Log::warning('gmx.imap.ssl_connect_failed', [
+                    'host' => $host,
+                    'port' => $port,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
+        }
+
+        if (in_array($encryption, ['ssl', 'tls', 'starttls'], true)) {
+            $startTlsPort = $encryption === 'starttls' && $port > 0 ? $port : 143;
+            $lastStartTlsError = null;
+
+            for ($attempt = 1; $attempt <= 3; $attempt++) {
+                try {
+                    return $this->connectWithStartTls($host, $startTlsPort);
+                } catch (RuntimeException $exception) {
+                    $lastStartTlsError = $exception->getMessage();
+                    Log::warning('gmx.imap.starttls_attempt_failed', [
+                        'attempt' => $attempt,
+                        'error' => $lastStartTlsError,
+                    ]);
+                    usleep(350_000);
+                }
+            }
+
+            if ($lastStartTlsError !== null) {
+                $errors[] = $lastStartTlsError;
+            }
+        }
+
+        throw new RuntimeException(
+            'IMAP connect failed: '.($errors !== [] ? implode(' | ', $errors) : "unsupported encryption [{$encryption}]"),
+        );
+    }
+
+    /**
+     * @return resource
+     */
+    private function connectImplicitSsl(string $host, int $port)
+    {
+        $remote = sprintf('ssl://%s:%d', $host, $port);
         $socket = @stream_socket_client(
             $remote,
             $errno,
             $errstr,
-            30,
+            20,
             STREAM_CLIENT_CONNECT,
-            stream_context_create([
-                'ssl' => [
-                    'verify_peer' => true,
-                    'verify_peer_name' => true,
-                ],
-            ]),
+            $this->sslContext($host),
         );
 
         if ($socket === false) {
-            throw new RuntimeException("IMAP connect failed: {$errstr} ({$errno})");
+            throw new RuntimeException("IMAP SSL connect failed: {$errstr} ({$errno})");
         }
 
-        stream_set_timeout($socket, 30);
-        $this->readLine($socket);
+        stream_set_timeout($socket, 90);
+        $banner = $this->readLineOrNull($socket);
+
+        if ($banner === null) {
+            fclose($socket);
+            throw new RuntimeException('IMAP SSL connected but greeting was not received (port 993 may be blocked).');
+        }
 
         return $socket;
+    }
+
+    /**
+     * @return resource
+     */
+    private function connectWithStartTls(string $host, int $port)
+    {
+        $remote = sprintf('tcp://%s:%d', $host, $port);
+        $socket = @stream_socket_client(
+            $remote,
+            $errno,
+            $errstr,
+            20,
+            STREAM_CLIENT_CONNECT,
+            $this->sslContext($host),
+        );
+
+        if ($socket === false) {
+            throw new RuntimeException("IMAP STARTTLS TCP connect failed: {$errstr} ({$errno})");
+        }
+
+        stream_set_timeout($socket, 90);
+        $banner = $this->readLineOrNull($socket);
+
+        if ($banner === null) {
+            fclose($socket);
+            throw new RuntimeException('IMAP STARTTLS greeting was not received.');
+        }
+
+        $tag = 'A000';
+        $this->write($socket, "{$tag} STARTTLS");
+        $response = $this->readUntilTagged($socket, $tag);
+
+        if (! str_contains(strtoupper($response), "{$tag} OK")) {
+            fclose($socket);
+            throw new RuntimeException('IMAP STARTTLS negotiation failed.');
+        }
+
+        // Windows PHP OpenSSL: unrestricted TLS_CLIENT succeeds where TLSv1_2-only often fails.
+        $crypto = @stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
+
+        if ($crypto !== true) {
+            fclose($socket);
+            throw new RuntimeException('IMAP STARTTLS TLS handshake failed.');
+        }
+
+        // enable_crypto can return true while the session is already dead — probe with NOOP.
+        try {
+            $tag = 'A000N';
+            $this->write($socket, "{$tag} NOOP");
+            $noop = $this->readUntilTagged($socket, $tag);
+            if (! str_contains(strtoupper($noop), "{$tag} OK")) {
+                throw new RuntimeException('IMAP STARTTLS NOOP failed.');
+            }
+        } catch (RuntimeException $exception) {
+            fclose($socket);
+            throw new RuntimeException(
+                'IMAP STARTTLS connected but session died (firewall/proxy/TLS). '.$exception->getMessage(),
+                0,
+                $exception,
+            );
+        }
+
+        return $socket;
+    }
+
+    /**
+     * @return resource
+     */
+    private function sslContext(string $host)
+    {
+        return stream_context_create([
+            'ssl' => [
+                'verify_peer' => true,
+                'verify_peer_name' => true,
+                'peer_name' => $host,
+                'SNI_enabled' => true,
+            ],
+        ]);
+    }
+
+    /**
+     * @param  resource  $socket
+     */
+    private function readLineOrNull($socket): ?string
+    {
+        $line = @fgets($socket);
+
+        if ($line === false) {
+            return null;
+        }
+
+        return rtrim($line, "\r\n");
     }
 
     /**
@@ -79,7 +220,11 @@ class MinimalImapClient
     {
         $tagSelect = 'A002';
         $this->write($socket, "{$tagSelect} SELECT INBOX");
-        $selectResponse = $this->readUntilTagged($socket, $tagSelect);
+        try {
+            $selectResponse = $this->readUntilTagged($socket, $tagSelect);
+        } catch (RuntimeException $exception) {
+            throw new RuntimeException('IMAP SELECT read failed: '.$exception->getMessage(), 0, $exception);
+        }
 
         if (! str_contains(strtoupper($selectResponse), "{$tagSelect} OK")) {
             throw new RuntimeException('IMAP SELECT INBOX failed.');
@@ -91,7 +236,11 @@ class MinimalImapClient
 
         $tagSearch = 'A003';
         $this->write($socket, "{$tagSearch} UID SEARCH {$criteria}");
-        $searchResponse = $this->readUntilTagged($socket, $tagSearch);
+        try {
+            $searchResponse = $this->readUntilTagged($socket, $tagSearch);
+        } catch (RuntimeException $exception) {
+            throw new RuntimeException('IMAP SEARCH read failed: '.$exception->getMessage(), 0, $exception);
+        }
 
         if (! preg_match('/\* SEARCH(.*)$/im', $searchResponse, $matches)) {
             return [];
@@ -102,22 +251,35 @@ class MinimalImapClient
             preg_split('/\s+/', trim($matches[1])) ?: [],
         ), static fn (string $part): bool => $part !== '' && ctype_digit($part)));
 
+        // Newest first — oldest-first often hit huge legacy MIME and timed out mid-read.
+        $uids = array_reverse($uids);
         $messages = [];
 
         foreach ($uids as $index => $uid) {
             // Cap per-sync volume for first-pass reliability on free GMX accounts.
-            if ($index >= 50) {
+            if ($index >= 25) {
                 break;
             }
 
             $tag = sprintf('A%03d', 100 + $index);
-            // Prefer first body part (usually text/plain) over BODY[]/TEXT which can
-            // include huge multipart MIME + PDF attachments and blow up DB/logs.
-            $this->write(
-                $socket,
-                "{$tag} UID FETCH {$uid} (BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE MESSAGE-ID)] BODY.PEEK[1])",
-            );
-            $fetch = $this->readUntilTagged($socket, $tag);
+
+            try {
+                // Partial first body part (<8 KiB) avoids multi-MB literals that stall/drop the socket.
+                $this->write(
+                    $socket,
+                    "{$tag} UID FETCH {$uid} (BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE MESSAGE-ID)] BODY.PEEK[1]<0.8191>)",
+                );
+                $fetch = $this->readUntilTagged($socket, $tag);
+            } catch (RuntimeException $exception) {
+                // Socket likely dead or desynced — return what we already parsed instead of failing the sync.
+                Log::warning('gmx.imap.fetch.aborted', [
+                    'uid' => $uid,
+                    'fetched_so_far' => count($messages),
+                    'error' => $exception->getMessage(),
+                ]);
+
+                break;
+            }
 
             if (! str_contains(strtoupper($fetch), "{$tag} OK")) {
                 continue;
@@ -165,10 +327,12 @@ class MinimalImapClient
      */
     private function readLine($socket): string
     {
-        $line = fgets($socket);
+        $line = @fgets($socket);
 
         if ($line === false) {
-            throw new RuntimeException('IMAP read failed.');
+            $meta = @stream_get_meta_data($socket);
+            $timedOut = is_array($meta) && ($meta['timed_out'] ?? false);
+            throw new RuntimeException($timedOut ? 'IMAP read timed out.' : 'IMAP read failed.');
         }
 
         return rtrim($line, "\r\n");
@@ -210,6 +374,7 @@ class MinimalImapClient
                 $length = (int) $matches[1];
                 $literal = $this->readBytes($socket, $length);
                 $buffer .= $line."\n".$literal;
+
                 // IMAP literals are followed by CRLF before the next line.
                 continue;
             }
@@ -285,10 +450,9 @@ class MinimalImapClient
 
     private function extractBodyText(string $fetch): ?string
     {
-        foreach (['BODY[1]', 'BODY[TEXT]'] as $section) {
-            $quotedSection = preg_quote($section, '/');
-
-            if (preg_match('/'.$quotedSection.'\s*\{(\d+)\}\n/s', $fetch, $matches, PREG_OFFSET_CAPTURE)) {
+        // Partial fetches reply as BODY[1]<0> {n}; full fetches as BODY[1] {n}.
+        foreach (['BODY\[1\](?:<\d+>)?', 'BODY\[TEXT\](?:<\d+>)?'] as $section) {
+            if (preg_match('/'.$section.'\s*\{(\d+)\}\n/s', $fetch, $matches, PREG_OFFSET_CAPTURE)) {
                 $length = (int) $matches[1][0];
                 $start = $matches[0][1] + strlen($matches[0][0]);
                 $body = substr($fetch, $start, $length);
@@ -296,11 +460,11 @@ class MinimalImapClient
                 return $body === false || $body === '' ? null : $this->normalizeBody($body);
             }
 
-            if (preg_match('/'.$quotedSection.'\s+"((?:\\\\.|[^"\\\\])*)"/s', $fetch, $matches)) {
+            if (preg_match('/'.$section.'\s+"((?:\\\\.|[^"\\\\])*)"/s', $fetch, $matches)) {
                 return $this->normalizeBody(stripcslashes($matches[1]));
             }
 
-            if (preg_match('/'.$quotedSection.'\s+NIL/i', $fetch)) {
+            if (preg_match('/'.$section.'\s+NIL/i', $fetch)) {
                 return null;
             }
         }

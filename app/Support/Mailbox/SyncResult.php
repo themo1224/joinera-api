@@ -8,6 +8,6 @@ final class SyncResult
         public readonly int $upserted = 0,
         public readonly bool $authFailed = false,
         public readonly ?string $error = null,
-    ) {
-    }
+        public readonly ?string $detail = null,
+    ) {}
 }

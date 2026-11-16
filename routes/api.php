@@ -11,9 +11,14 @@ use App\Http\Controllers\ProfileCvController;
 use App\Http\Controllers\ProfileParseController;
 use App\Http\Controllers\ProfilePrioritiesController;
 use App\Http\Controllers\SiteIdentityController;
+use App\Http\Controllers\StaffApplicationController;
+use App\Http\Controllers\StaffApplicationDocsController;
+use App\Http\Controllers\StaffBlockEventController;
+use App\Http\Controllers\StaffBreakGlassController;
 use App\Http\Controllers\StaffIdentityReadinessController;
 use App\Http\Controllers\StaffMailboxController;
 use App\Http\Controllers\StaffMatchController;
+use App\Http\Controllers\StaffOpsReportController;
 use App\Http\Controllers\StaffPrioritiesController;
 use App\Http\Controllers\StaffProfileController;
 use App\Http\Controllers\StaffSiteIdentityController;
@@ -76,5 +81,18 @@ Route::prefix('v1')->group(function () {
 
         Route::get('matches', [StaffMatchController::class, 'index'])->middleware('staff');
         Route::post('matches/{match}/force-queue', [StaffMatchController::class, 'forceQueue'])->middleware('staff');
+
+        Route::get('applications', [StaffApplicationController::class, 'index'])->middleware('staff');
+        Route::get('applications/{application}', [StaffApplicationController::class, 'show'])->middleware('staff');
+        Route::get('applications/{application}/docs/{kind}', [StaffApplicationDocsController::class, 'download'])
+            ->whereIn('kind', ['cv', 'cover'])
+            ->middleware('staff');
+        Route::post('applications/{application}/docs/generate', [StaffApplicationDocsController::class, 'generate'])
+            ->middleware('staff');
+
+        Route::get('ops/reports', [StaffOpsReportController::class, 'show'])->middleware('staff');
+        Route::get('ops/blocks', [StaffBlockEventController::class, 'index'])->middleware('staff');
+        Route::post('site-identities/{siteIdentity}/break-glass', [StaffBreakGlassController::class, 'store'])
+            ->middleware('staff');
     });
 });

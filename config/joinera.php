@@ -80,11 +80,22 @@ return [
         'alerts' => 'alerts',
         'match' => env('JOINERA_QUEUE_MATCH', 'match'),
         'docs' => env('JOINERA_QUEUE_DOCS', 'docs'),
+        'apply' => env('JOINERA_QUEUE_APPLY', 'apply'),
     ],
+
     'apply' => [
         // Q17: Applications per Candidate per active window (not profile CVs).
         'cap' => max(1, (int) env('JOINERA_APPLY_CAP', 10)),
         'cap_window' => env('JOINERA_APPLY_CAP_WINDOW', 'daily'), // daily|weekly
+    ],
+
+    // Mode B browser worker (Playwright Node). Tests always bind FixtureModeBBrowserAdapter.
+    'mode_b' => [
+        // fixture | http — http calls the Playwright worker; fixture is local stub.
+        'driver' => env('JOINERA_MODE_B_DRIVER', 'fixture'),
+        'worker_url' => rtrim((string) env('JOINERA_MODE_B_WORKER_URL', 'http://127.0.0.1:3911'), '/'),
+        'worker_secret' => (string) env('JOINERA_MODE_B_WORKER_SECRET', ''),
+        'timeout' => max(5, (int) env('JOINERA_MODE_B_TIMEOUT', 120)),
     ],
     // P0-13 preparing_docs: cover (+ CV when category differs) via LlmClient + PdfRenderer.
     'docs' => [

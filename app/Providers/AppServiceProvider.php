@@ -11,6 +11,8 @@ use App\Contracts\LlmClient;
 use App\Contracts\MailboxInboundSync;
 use App\Contracts\MailboxOutboundMailer;
 use App\Contracts\MailboxProvider;
+use App\Contracts\ModeBBrowserPort;
+use App\Contracts\ModeBSubmitAfterDocsReady;
 use App\Contracts\PdfRenderer;
 use App\Events\CandidateMatchRecomputeRequested;
 use App\Events\ListingCreated;
@@ -20,6 +22,9 @@ use App\Listeners\DispatchRematchOnCandidateMatchRecomputeRequested;
 use App\Listeners\DispatchRematchOnProfilePrioritiesChanged;
 use App\Services\Ai\FakeLlmClient;
 use App\Services\Ai\OpenRouterLlmClient;
+use App\Services\Apply\FixtureModeBBrowserAdapter;
+use App\Services\Apply\HttpModeBBrowserAdapter;
+use App\Services\Apply\RunModeBSubmitAfterDocsReady;
 use App\Services\ArbeitsagenturDe\ArbeitsagenturDeIntakeAdapter;
 use App\Services\ArbeitsagenturDe\FakeArbeitsagenturDeHttpClient;
 use App\Services\ArbeitsagenturDe\LaravelArbeitsagenturDeHttpClient;
@@ -53,6 +58,14 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(CvParser::class, FixtureCvParser::class);
+        $this->app->bind(ModeBBrowserPort::class, function ($app) {
+            if ($this->useFixtureModeBBrowser()) {
+                return $app->make(FixtureModeBBrowserAdapter::class);
+            }
+
+            return $app->make(HttpModeBBrowserAdapter::class);
+        });
+        $this->app->bind(ModeBSubmitAfterDocsReady::class, RunModeBSubmitAfterDocsReady::class);
 
         $this->app->bind(LlmClient::class, function ($app) {
             if ($this->useFakeLlmClient()) {
@@ -190,5 +203,12 @@ class AppServiceProvider extends ServiceProvider
     private function useFakePdfRenderer(): bool
     {
         return $this->app->environment('testing');
+    }
+
+    private function useFixtureModeBBrowser(): bool
+    {
+        $driver = config('joinera.mode_b.driver', 'fixture');
+
+        return $driver === 'fixture' || $this->app->environment('testing');
     }
 }

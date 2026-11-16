@@ -3,6 +3,7 @@
 use App\Http\Controllers\ApplicantController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\IdentityReadinessController;
+use App\Http\Controllers\InternalModeBContextController;
 use App\Http\Controllers\ListingImportController;
 use App\Http\Controllers\MailboxController;
 use App\Http\Controllers\ProfileController;
@@ -22,6 +23,12 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1')->group(function () {
     Route::post('signup', [AuthController::class, 'signup']);
     Route::post('login', [AuthController::class, 'login']);
+
+    Route::middleware('mode_b_worker')->prefix('internal/mode-b')->group(function () {
+        Route::get('applications/{application}', [InternalModeBContextController::class, 'show']);
+        Route::get('applications/{application}/artifacts/{kind}', [InternalModeBContextController::class, 'artifact'])
+            ->whereIn('kind', ['cv', 'cover']);
+    });
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('logout', [AuthController::class, 'logout']);

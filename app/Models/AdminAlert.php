@@ -15,6 +15,8 @@ class AdminAlert extends Model
 
     public const KIND_INTAKE_SITE_REPEATED_FAILURE = 'intake_site_repeated_failure';
 
+    public const KIND_APPLY_CHALLENGE = 'apply_challenge';
+
     /**
      * @return array<string, string>
      */

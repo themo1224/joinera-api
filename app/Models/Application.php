@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * Default status is {@see ApplicationStatus::Matched} (PRD first pipeline stage).
  * Auto-promote matched → queued is owned by {@see CreateQueuedApplicationFromMatch}.
  * Docs prepare (queued → preparing_docs → applying) is owned by PrepareApplicationDocuments.
+ * Browser submit (Mode B) starts only from applying with both DocArtifacts present.
  */
 #[Fillable([
     'user_id',
@@ -61,6 +62,14 @@ class Application extends Model
     public function docArtifacts(): HasMany
     {
         return $this->hasMany(DocArtifact::class);
+    }
+
+    /**
+     * @return HasMany<ApplyAttempt, $this>
+     */
+    public function applyAttempts(): HasMany
+    {
+        return $this->hasMany(ApplyAttempt::class);
     }
 
     /**

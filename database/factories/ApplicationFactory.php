@@ -53,6 +53,48 @@ class ApplicationFactory extends Factory
         ]);
     }
 
+    public function applying(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => ApplicationStatus::Applying,
+        ]);
+    }
+
+    public function submitted(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => ApplicationStatus::Submitted,
+        ]);
+    }
+
+    public function replyReceived(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => ApplicationStatus::ReplyReceived,
+        ]);
+    }
+
+    public function interview(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => ApplicationStatus::Interview,
+        ]);
+    }
+
+    public function rejected(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => ApplicationStatus::Rejected,
+        ]);
+    }
+
+    public function offer(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => ApplicationStatus::Offer,
+        ]);
+    }
+
     public function forMatch(CandidateListingMatch $match): static
     {
         return $this->state(fn (array $attributes) => [

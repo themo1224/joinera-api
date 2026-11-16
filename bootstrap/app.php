@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureAdmin;
+use App\Http\Middleware\EnsureModeBWorkerSecret;
 use App\Http\Middleware\EnsureStaffOrAdmin;
 use App\Http\Middleware\EnsureUser;
 use Illuminate\Auth\AuthenticationException;
@@ -22,7 +23,17 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin' => EnsureAdmin::class,
             'staff' => EnsureStaffOrAdmin::class,
             'user' => EnsureUser::class,
+            'mode_b_worker' => EnsureModeBWorkerSecret::class,
         ]);
+
+        // API-only app: never resolve named route('login') for guests (browser GETs to /api/*).
+        $middleware->redirectGuestsTo(function (Request $request) {
+            if ($request->is('api/*')) {
+                return null;
+            }
+
+            return '/login';
+        });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

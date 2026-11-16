@@ -21,18 +21,17 @@ use App\Services\Docs\FakePdfRenderer;
 use App\Services\Docs\PrepareApplicationDocuments;
 use App\Support\LlmChatResult;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
- * P0-13 preparing_docs acceptance (in-scope).
+ * P0-13 preparing_docs acceptance (pipeline + artifacts).
  *
- * Deferred (no download/generate HTTP in this plan):
- * - another User’s download is 404
- * - User download response contains no price/payment/free
- * - User cannot generate docs while still queued (409)
+ * Staff/Admin download + generate + approve-404 + Candidate 403 are covered in
+ * {@see StaffApplicationDocsTest} (Candidates have no panel; no Candidate download route).
  *
  * @see docs/api/IMPLEMENTATION_PHASES.md P0-13
  */
@@ -125,16 +124,28 @@ class PrepareApplicationDocsTest extends TestCase
         $this->assertNotNull($cover->llm_model);
     }
 
-    public function test_missing_listing_category_is_category_unknown_and_stores_nothing(): void
+    public function test_missing_listing_category_generates_cv_and_cover_interim(): void
     {
         $application = $this->makeQueuedApplication(industry: 'IT', category: null, withBaseCv: true);
 
         app(PrepareApplicationDocuments::class)->handle($application->id);
 
         $application->refresh();
-        $this->assertSame(ApplicationStatus::PreparingDocs, $application->status);
-        $this->assertSame(DocsFailureCode::CategoryUnknown->value, $application->docs_failure_code);
-        $this->assertSame(0, DocArtifact::query()->where('application_id', $application->id)->count());
+        $this->assertSame(ApplicationStatus::Applying, $application->status);
+        $this->assertNull($application->docs_failure_code);
+        $this->assertSame(2, DocArtifact::query()->where('application_id', $application->id)->count());
+        $this->assertTrue(
+            DocArtifact::query()
+                ->where('application_id', $application->id)
+                ->where('kind', DocArtifactKind::Cv)
+                ->exists()
+        );
+        $this->assertTrue(
+            DocArtifact::query()
+                ->where('application_id', $application->id)
+                ->where('kind', DocArtifactKind::Cover)
+                ->exists()
+        );
     }
 
     public function test_non_pdf_generator_stores_nothing(): void
@@ -155,16 +166,30 @@ class PrepareApplicationDocsTest extends TestCase
         $this->assertSame(0, DocArtifact::query()->where('application_id', $application->id)->count());
     }
 
-    public function test_missing_base_cv_on_cover_only_fails(): void
+    public function test_missing_base_cv_on_cover_only_falls_back_to_generate(): void
     {
         $application = $this->makeQueuedApplication(industry: 'IT', category: 'IT', withBaseCv: false);
 
         app(PrepareApplicationDocuments::class)->handle($application->id);
 
         $application->refresh();
-        $this->assertSame(ApplicationStatus::PreparingDocs, $application->status);
-        $this->assertSame(DocsFailureCode::MissingBaseCv->value, $application->docs_failure_code);
-        $this->assertSame(0, DocArtifact::query()->where('application_id', $application->id)->count());
+        $this->assertSame(ApplicationStatus::Applying, $application->status);
+        $this->assertNull($application->docs_failure_code);
+
+        $cv = DocArtifact::query()
+            ->where('application_id', $application->id)
+            ->where('kind', DocArtifactKind::Cv)
+            ->first();
+        $cover = DocArtifact::query()
+            ->where('application_id', $application->id)
+            ->where('kind', DocArtifactKind::Cover)
+            ->first();
+
+        $this->assertNotNull($cv);
+        $this->assertNotNull($cover);
+        $this->assertFalse($cv->cache_hit);
+        $this->assertSame(DocGenerationRule::CvAndCover, $cv->rule);
+        $this->assertSame(DocGenerationRule::CvAndCover, $cover->rule);
     }
 
     public function test_empty_llm_cover_fails_without_artifacts(): void
@@ -242,14 +267,48 @@ class PrepareApplicationDocsTest extends TestCase
             ->assertNotFound();
     }
 
-    /**
-     * @group deferred-p0-13-download
-     */
-    public function test_deferred_download_and_queued_generate_http_not_in_this_plan(): void
+    public function test_force_regenerate_from_applying_overwrites_artifacts(): void
     {
-        $this->markTestSkipped(
-            'Deferred: owner download 404/price checks and queued generate 409 require download/generate HTTP (scope A).',
-        );
+        $application = $this->makeQueuedApplication(industry: 'IT', category: 'IT', withBaseCv: true);
+        app(PrepareApplicationDocuments::class)->handle($application->id);
+        $application->refresh();
+        $this->assertSame(ApplicationStatus::Applying, $application->status);
+
+        $beforeCover = DocArtifact::query()
+            ->where('application_id', $application->id)
+            ->where('kind', DocArtifactKind::Cover)
+            ->value('path');
+        $this->assertNotNull($beforeCover);
+
+        app(PrepareApplicationDocuments::class)->handle($application->id, force: true);
+
+        $application->refresh();
+        $this->assertSame(ApplicationStatus::Applying, $application->status);
+        $this->assertNull($application->docs_failure_code);
+
+        $afterCover = DocArtifact::query()
+            ->where('application_id', $application->id)
+            ->where('kind', DocArtifactKind::Cover)
+            ->value('path');
+        $this->assertNotNull($afterCover);
+        $this->assertNotSame($beforeCover, $afterCover);
+        Storage::disk('local')->assertMissing($beforeCover);
+        Storage::disk('local')->assertExists($afterCover);
+    }
+
+    public function test_rate_limited_prepare_sets_docs_failure_code_and_stores_nothing(): void
+    {
+        config(['joinera.docs.regenerate_max_per_hour' => 1]);
+
+        $application = $this->makeQueuedApplication(industry: 'IT', category: 'IT', withBaseCv: true);
+        Cache::put('docs:prepare:'.$application->id, 1, now()->addHour());
+
+        app(PrepareApplicationDocuments::class)->handle($application->id);
+
+        $application->refresh();
+        $this->assertSame(ApplicationStatus::PreparingDocs, $application->status);
+        $this->assertSame(DocsFailureCode::RateLimited->value, $application->docs_failure_code);
+        $this->assertSame(0, DocArtifact::query()->where('application_id', $application->id)->count());
     }
 
     private function makeQueuedApplication(

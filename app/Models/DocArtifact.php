@@ -23,6 +23,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'llm_prompt_tokens',
     'llm_completion_tokens',
     'llm_total_tokens',
+    'cost_minor_units',
 ])]
 class DocArtifact extends Model
 {
@@ -49,6 +50,7 @@ class DocArtifact extends Model
             'llm_prompt_tokens' => 'integer',
             'llm_completion_tokens' => 'integer',
             'llm_total_tokens' => 'integer',
+            'cost_minor_units' => 'integer',
         ];
     }
 }

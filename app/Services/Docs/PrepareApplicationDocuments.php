@@ -10,6 +10,7 @@ use App\Enums\DocsFailureCode;
 use App\Events\ApplicationStatusChanged;
 use App\Exceptions\LlmRequestException;
 use App\Exceptions\NonPdfOutputException;
+use App\Jobs\SubmitApplicationJob;
 use App\Models\Application;
 use App\Models\CvAsset;
 use App\Models\DocArtifact;
@@ -20,32 +21,40 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
+/**
+ * Q20 preparing_docs: cover (+ CV when category differs) via LlmClient + PdfRenderer.
+ *
+ * Success leaves the application in {@see ApplicationStatus::Applying} with both
+ * DocArtifact kinds. Mode B submit must require applying + null docs_failure_code
+ * + cv/cover PDFs, and must not call the browser adapter on docs failures.
+ */
 class PrepareApplicationDocuments
 {
     public function __construct(
         private readonly ResolveDocGenerationRule $resolveRule,
         private readonly GenerateCoverLetterText $generateCover,
         private readonly GenerateCvText $generateCv,
-        private readonly WrapDocHtml $wrapHtml,
+        private readonly RenderCleanA4SplitHtml $renderHtml,
         private readonly PdfRenderer $pdfRenderer,
         private readonly StoreDocArtifact $storeArtifact,
     ) {}
 
-    public function handle(int $applicationId): void
+    public function handle(int $applicationId, bool $force = false): void
     {
         $application = Application::query()->find($applicationId);
         if ($application === null) {
             return;
         }
 
-        if ($this->isComplete($application)) {
+        if (! $force && $this->isComplete($application)) {
             return;
         }
 
-        if (! in_array($application->status, [
-            ApplicationStatus::Queued,
-            ApplicationStatus::PreparingDocs,
-        ], true)) {
+        $allowed = $force
+            ? [ApplicationStatus::PreparingDocs, ApplicationStatus::Applying]
+            : [ApplicationStatus::Queued, ApplicationStatus::PreparingDocs];
+
+        if (! in_array($application->status, $allowed, true)) {
             return;
         }
 
@@ -55,7 +64,13 @@ class PrepareApplicationDocuments
             return;
         }
 
-        $this->markPreparing($application);
+        $wasApplying = $application->status === ApplicationStatus::Applying;
+
+        if ($force && $wasApplying) {
+            $this->clearFailureCode($application);
+        } else {
+            $this->markPreparing($application);
+        }
 
         $application->loadMissing(['user.profile', 'user.cvAsset', 'listing']);
         $profile = $application->user?->profile;
@@ -68,6 +83,8 @@ class PrepareApplicationDocuments
         }
 
         $rule = $this->resolveRule->handle($profile, $listing);
+        // CategoryUnknown is retained on the enum for older failure rows; resolve no longer
+        // returns it for empty category (interim CV+cover — PRD Q-Listing-Category).
         if ($rule === DocGenerationRule::CategoryUnknown) {
             $this->fail($application, DocsFailureCode::CategoryUnknown);
 
@@ -109,7 +126,33 @@ class PrepareApplicationDocuments
             return;
         }
 
+        if ($wasApplying) {
+            $this->clearFailureCode($application);
+
+            return;
+        }
+
         $this->markApplying($application);
+
+        $application->refresh();
+        if (
+            $application->status === ApplicationStatus::Applying
+            && $application->docs_failure_code === null
+        ) {
+            SubmitApplicationJob::dispatch($application->id);
+        }
+    }
+
+    /**
+     * True when another prepare would exceed the per-application hourly cap.
+     */
+    public function isRateLimited(int $applicationId): bool
+    {
+        $max = (int) config('joinera.docs.regenerate_max_per_hour', 3);
+        $key = 'docs:prepare:'.$applicationId;
+        $count = (int) Cache::get($key, 0);
+
+        return $count >= $max;
     }
 
     private function prepareCoverOnly(Application $application, Profile $profile, Listing $listing): void
@@ -117,7 +160,8 @@ class PrepareApplicationDocuments
         $cvAsset = $application->user?->cvAsset;
         $pdfBytes = $this->readBaseCvPdf($cvAsset);
         if ($pdfBytes === null) {
-            $this->fail($application, DocsFailureCode::MissingBaseCv);
+            // CV is optional enrichment — generate Lebenslauf + Anschreiben from profile.
+            $this->prepareCvAndCover($application, $profile, $listing);
 
             return;
         }
@@ -138,7 +182,15 @@ class PrepareApplicationDocuments
             return;
         }
 
-        $html = $this->wrapHtml->handle('Anschreiben', $cover->text);
+        $user = $application->user;
+        if ($user === null) {
+            $this->discardArtifacts($application);
+            $this->fail($application, DocsFailureCode::LlmEmpty);
+
+            return;
+        }
+
+        $html = $this->renderHtml->cover($user, $profile, $cover->text, $listing);
         $coverPdf = $this->pdfRenderer->render($html);
 
         $this->storeArtifact->handle(
@@ -153,6 +205,13 @@ class PrepareApplicationDocuments
 
     private function prepareCvAndCover(Application $application, Profile $profile, Listing $listing): void
     {
+        $user = $application->user;
+        if ($user === null) {
+            $this->fail($application, DocsFailureCode::LlmEmpty);
+
+            return;
+        }
+
         $cv = $this->generateCv->handle($profile, $listing);
         if ($cv->text === '') {
             $this->fail($application, DocsFailureCode::LlmEmpty);
@@ -168,10 +227,10 @@ class PrepareApplicationDocuments
         }
 
         $cvPdf = $this->pdfRenderer->render(
-            $this->wrapHtml->handle('Lebenslauf', $cv->text),
+            $this->renderHtml->cv($user, $profile, $cv->text),
         );
         $coverPdf = $this->pdfRenderer->render(
-            $this->wrapHtml->handle('Anschreiben', $cover->text),
+            $this->renderHtml->cover($user, $profile, $cover->text, $listing),
         );
 
         $this->storeArtifact->handle(
@@ -263,6 +322,16 @@ class PrepareApplicationDocuments
 
             $application->refresh();
         });
+    }
+
+    private function clearFailureCode(Application $application): void
+    {
+        if ($application->docs_failure_code === null) {
+            return;
+        }
+
+        $application->docs_failure_code = null;
+        $application->save();
     }
 
     private function fail(Application $application, DocsFailureCode $code): void

@@ -7,6 +7,7 @@ use App\Exceptions\LlmRequestException;
 use App\Models\Listing;
 use App\Models\Profile;
 use App\Support\GeneratedDocText;
+use App\Support\ProfilePromptContext;
 
 class GenerateCoverLetterText
 {
@@ -28,13 +29,9 @@ class GenerateCoverLetterText
         $userPrompt = implode("\n", [
             'Erstelle ein kurzes, professionelles Anschreiben auf Deutsch für diese Bewerbung.',
             'Nur Fließtext, keine Markdown-Überschriften, keine Preis- oder Zahlungsangaben.',
+            'Nutze die strukturierten Profildaten. Erfinde keine Fakten.',
             '',
-            'Profil:',
-            '- Branche: '.($profile->industry ?? ''),
-            '- Stadt: '.($profile->city ?? ''),
-            '- Bundesland: '.($profile->province ?? ''),
-            '- Sprache: '.($profile->language ?? ''),
-            '- Ausbildung: '.($profile->education ?? ''),
+            ...ProfilePromptContext::lines($profile),
             '',
             'Stelle:',
             '- Titel: '.($listing->title ?? ''),

@@ -20,13 +20,14 @@ class PrepareApplicationDocsJob implements ShouldBeUnique, ShouldQueue
 
     public function __construct(
         public readonly int $applicationId,
+        public readonly bool $force = false,
     ) {
         $this->onQueue((string) config('joinera.queues.docs', 'docs'));
     }
 
     public function uniqueId(): string
     {
-        return (string) $this->applicationId;
+        return (string) $this->applicationId.($this->force ? ':force' : '');
     }
 
     /**
@@ -42,7 +43,7 @@ class PrepareApplicationDocsJob implements ShouldBeUnique, ShouldQueue
     public function handle(PrepareApplicationDocuments $prepare): void
     {
         try {
-            $prepare->handle($this->applicationId);
+            $prepare->handle($this->applicationId, $this->force);
         } catch (LlmRequestException $exception) {
             throw $exception;
         }

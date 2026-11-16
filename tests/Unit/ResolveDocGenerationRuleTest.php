@@ -40,24 +40,24 @@ class ResolveDocGenerationRuleTest extends TestCase
         $this->assertSame(DocGenerationRule::CvAndCover, $rule);
     }
 
-    public function test_missing_category_is_unknown(): void
+    public function test_missing_category_is_cv_and_cover_interim(): void
     {
         $rule = (new ResolveDocGenerationRule)->handle(
             $this->profile('IT'),
             $this->listing(null),
         );
 
-        $this->assertSame(DocGenerationRule::CategoryUnknown, $rule);
+        $this->assertSame(DocGenerationRule::CvAndCover, $rule);
     }
 
-    public function test_missing_industry_is_unknown(): void
+    public function test_missing_industry_is_cv_and_cover_interim(): void
     {
         $rule = (new ResolveDocGenerationRule)->handle(
             $this->profile(null),
             $this->listing('IT'),
         );
 
-        $this->assertSame(DocGenerationRule::CategoryUnknown, $rule);
+        $this->assertSame(DocGenerationRule::CvAndCover, $rule);
     }
 
     private function profile(?string $industry): Profile

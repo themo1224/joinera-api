@@ -37,7 +37,15 @@ class DocArtifactFactory extends Factory
             'llm_prompt_tokens' => null,
             'llm_completion_tokens' => null,
             'llm_total_tokens' => null,
+            'cost_minor_units' => null,
         ];
+    }
+
+    public function withCost(int $minorUnits): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'cost_minor_units' => $minorUnits,
+        ]);
     }
 
     public function cv(): static

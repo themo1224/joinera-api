@@ -16,12 +16,14 @@ use App\Http\Controllers\StaffApplicationDocsController;
 use App\Http\Controllers\StaffBlockEventController;
 use App\Http\Controllers\StaffBreakGlassController;
 use App\Http\Controllers\StaffIdentityReadinessController;
+use App\Http\Controllers\StaffIndustryController;
 use App\Http\Controllers\StaffMailboxController;
 use App\Http\Controllers\StaffMatchController;
 use App\Http\Controllers\StaffOpsReportController;
 use App\Http\Controllers\StaffPrioritiesController;
 use App\Http\Controllers\StaffProfileController;
 use App\Http\Controllers\StaffSiteIdentityController;
+use App\Http\Controllers\StaffSubIndustryController;
 use App\Http\Controllers\StaffUserController;
 use Illuminate\Support\Facades\Route;
 
@@ -93,6 +95,22 @@ Route::prefix('v1')->group(function () {
         Route::get('ops/reports', [StaffOpsReportController::class, 'show'])->middleware('staff');
         Route::get('ops/blocks', [StaffBlockEventController::class, 'index'])->middleware('staff');
         Route::post('site-identities/{siteIdentity}/break-glass', [StaffBreakGlassController::class, 'store'])
+            ->middleware('staff');
+
+
+        Route::get('industries', [StaffIndustryController::class, 'index'])->middleware('staff');
+        Route::post('industries', [StaffIndustryController::class, 'store'])->middleware('staff');
+        Route::put('industries/{industry}', [StaffIndustryController::class, 'update'])->middleware('staff');
+        Route::post('industries/{industry}/archive', [StaffIndustryController::class, 'archive'])->middleware('staff');
+        Route::post('industries/{industry}/unarchive', [StaffIndustryController::class, 'unarchive'])->middleware('staff');
+
+        Route::post('industries/{industry}/sub-industries', [StaffSubIndustryController::class, 'store'])
+            ->middleware('staff');
+        Route::put('sub-industries/{subIndustry}', [StaffSubIndustryController::class, 'update'])
+            ->middleware('staff');
+        Route::post('sub-industries/{subIndustry}/archive', [StaffSubIndustryController::class, 'archive'])
+            ->middleware('staff');
+        Route::post('sub-industries/{subIndustry}/unarchive', [StaffSubIndustryController::class, 'unarchive'])
             ->middleware('staff');
     });
 });

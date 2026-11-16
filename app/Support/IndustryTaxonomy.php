@@ -5,7 +5,7 @@ namespace App\Support;
 /**
  * Ausbildung industry synonym + specialization families for hard-match.
  * Keep in sync with docs/matching/Suchbegriffe_Ausbildungsgesuche.md
- * and admin SUB_INDUSTRY_OPTIONS (specialization slugs).
+ * and DB industry/sub_industry slugs (IndustryCatalogSeeder + staff CRUD).
  */
 final class IndustryTaxonomy
 {

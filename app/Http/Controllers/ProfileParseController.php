@@ -19,7 +19,7 @@ class ProfileParseController extends Controller
         $user = $request->user();
 
         try {
-            $profile = $this->parseProfileCv->handle($user);
+            $parsed = $this->parseProfileCv->handle($user);
         } catch (CvMissingException) {
             return response()->json([
                 'code' => 'cv_missing',
@@ -33,7 +33,11 @@ class ProfileParseController extends Controller
         }
 
         $user->load('cvAsset');
+        $profile = $parsed['profile'];
 
-        return response()->json($profile->toOwnerArray($user->cvAsset));
+        return response()->json([
+            ...$profile->toOwnerArray($user->cvAsset),
+            'ingestion' => $parsed['result']->ingestion,
+        ]);
     }
 }

@@ -71,6 +71,9 @@ Route::prefix('v1')->group(function () {
         Route::get('users/{user}/profile/priorities', [StaffPrioritiesController::class, 'show'])->middleware('staff');
         Route::put('users/{user}/profile/priorities', [StaffPrioritiesController::class, 'update'])->middleware('staff');
         Route::post('users/{user}/profile/cv', [StaffProfileController::class, 'storeCv'])->middleware('staff');
+        Route::post('users/{user}/profile/parse', [StaffProfileController::class, 'parse'])->middleware('staff');
+        Route::post('users/{user}/profile/documents', [StaffProfileController::class, 'storeDocument'])->middleware('staff');
+        Route::post('users/{user}/profile/analyze-documents', [StaffProfileController::class, 'analyzeDocuments'])->middleware('staff');
         Route::post('users/{user}/profile/approvals', [StaffProfileController::class, 'approve'])->middleware('staff');
         Route::get('users/{user}/mailbox', [StaffMailboxController::class, 'show'])->middleware('staff');
         Route::put('users/{user}/mailbox/credentials', [StaffMailboxController::class, 'updateCredentials'])->middleware('admin');

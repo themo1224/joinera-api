@@ -8,8 +8,8 @@ use App\Support\LlmChatResult;
 interface LlmClient
 {
     /**
-     * @param  list<array{role: string, content: string}>  $messages
-     * @param  array{temperature?: float, max_tokens?: int}  $options
+     * @param  list<array{role: string, content: string|list<array<string, mixed>>}>  $messages
+     * @param  array{temperature?: float, max_tokens?: int, plugins?: list<array<string, mixed>>}  $options
      *
      * @throws LlmRequestException
      */

@@ -104,10 +104,39 @@ return [
         'regenerate_max_per_hour' => max(1, (int) env('JOINERA_DOCS_REGENERATE_MAX_PER_HOUR', 3)),
         'listing_description_max_chars' => max(200, (int) env('JOINERA_DOCS_LISTING_DESCRIPTION_MAX_CHARS', 2000)),
     ],
-    // LLM port for preparing_docs / cover+CV. Swap driver without rewriting jobs.
+    // Staff document ingestion (CV / passport / certs). Matching engine untouched.
+    'documents' => [
+        // ingestion | fixture — testing env always uses FixtureCvParser.
+        'cv_parser' => env('JOINERA_CV_PARSER', 'ingestion'),
+        // tesseract | null — testing env always uses NullDocumentOcrClient.
+        'ocr' => env('JOINERA_DOCUMENT_OCR', 'tesseract'),
+        // Residual text-only LLM for gaps; default off to minimize tokens.
+        'residual_llm' => (bool) env('JOINERA_DOCUMENT_RESIDUAL_LLM', false),
+    ],
+
+    // LLM port for preparing_docs / cover+CV / staff document analyze.
     'ai' => [
-        // openrouter | fake — testing env always uses Fake in AppServiceProvider.
+        // openrouter | gemini | fake — testing env always uses Fake in AppServiceProvider.
         'driver' => env('JOINERA_AI_DRIVER', 'openrouter'),
+        'gemini' => [
+            'api_key' => env('GEMINI_API_KEY'),
+            'base_url' => rtrim((string) env(
+                'GEMINI_BASE_URL',
+                'https://generativelanguage.googleapis.com/v1beta',
+            ), '/'),
+            // Prefer lite on free tier (higher RPM/RPD). Gemini 3 Flash free is ~5 RPM / 20 RPD.
+            'model' => env('GEMINI_MODEL', 'gemini-3.1-flash-lite-preview'),
+            'fallback_models' => array_values(array_filter(array_map(
+                static fn (string $model): string => trim($model),
+                explode(',', (string) env(
+                    'GEMINI_FALLBACK_MODELS',
+                    'gemini-2.5-flash,gemini-3-flash-preview,gemini-flash-latest',
+                )),
+            ))),
+            'timeout' => max(5, (int) env('GEMINI_TIMEOUT', 180)),
+            'connect_timeout' => max(5, (int) env('GEMINI_CONNECT_TIMEOUT', 45)),
+            'retries' => max(1, (int) env('GEMINI_RETRIES', 2)),
+        ],
         'openrouter' => [
             'api_key' => env('OPENROUTER_API_KEY'),
             'base_url' => rtrim((string) env('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'), '/'),
@@ -121,7 +150,13 @@ return [
             ))),
             'http_referer' => env('OPENROUTER_HTTP_REFERER'),
             'app_title' => env('OPENROUTER_APP_TITLE', 'Joinera'),
-            'timeout' => max(5, (int) env('OPENROUTER_TIMEOUT', 60)),
+            // Batch PDF analyze often needs >60s (OpenRouter file-parser + model).
+            'timeout' => max(5, (int) env('OPENROUTER_TIMEOUT', 180)),
+            // SSL handshake to openrouter.ai can be slow on some Windows/VPN networks.
+            'connect_timeout' => max(5, (int) env('OPENROUTER_CONNECT_TIMEOUT', 45)),
+            'retries' => max(1, (int) env('OPENROUTER_RETRIES', 3)),
+            // mistral-ocr | cloudflare-ai | native — used by staff analyze-documents PDF plugin.
+            'pdf_engine' => env('OPENROUTER_PDF_ENGINE', 'mistral-ocr'),
         ],
     ],
 ];

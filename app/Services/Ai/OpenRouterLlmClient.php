@@ -46,6 +46,10 @@ class OpenRouterLlmClient implements LlmClient
             $payload['max_tokens'] = (int) $options['max_tokens'];
         }
 
+        if (array_key_exists('plugins', $options) && is_array($options['plugins']) && $options['plugins'] !== []) {
+            $payload['plugins'] = array_values($options['plugins']);
+        }
+
         $headers = [
             'Authorization' => 'Bearer '.$apiKey,
             'Content-Type' => 'application/json',
@@ -62,17 +66,47 @@ class OpenRouterLlmClient implements LlmClient
         }
 
         $baseUrl = (string) config('joinera.ai.openrouter.base_url', 'https://openrouter.ai/api/v1');
-        $timeout = (int) config('joinera.ai.openrouter.timeout', 60);
+        $timeout = max(5, (int) config('joinera.ai.openrouter.timeout', 120));
+        $connectTimeout = max(5, (int) config('joinera.ai.openrouter.connect_timeout', 45));
+        $attempts = max(1, (int) config('joinera.ai.openrouter.retries', 3));
 
-        try {
-            $response = Http::withHeaders($headers)
-                ->timeout($timeout)
-                ->acceptJson()
-                ->post($baseUrl.'/chat/completions', $payload);
-        } catch (ConnectionException $e) {
-            throw new LlmRequestException('OpenRouter request failed to connect.', null, $e);
-        } catch (Throwable $e) {
-            throw new LlmRequestException('OpenRouter request failed.', null, $e);
+        $response = null;
+        $lastConnectionError = null;
+
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+            try {
+                $response = Http::withHeaders($headers)
+                    ->timeout($timeout)
+                    ->connectTimeout($connectTimeout)
+                    ->acceptJson()
+                    ->post($baseUrl.'/chat/completions', $payload);
+                $lastConnectionError = null;
+                break;
+            } catch (ConnectionException $e) {
+                $lastConnectionError = $e;
+                if ($attempt >= $attempts) {
+                    throw new LlmRequestException(
+                        'OpenRouter request failed to connect after '.$attempts.' attempts: '.$e->getMessage(),
+                        null,
+                        $e,
+                    );
+                }
+                usleep(250_000 * $attempt);
+            } catch (Throwable $e) {
+                throw new LlmRequestException(
+                    'OpenRouter request failed: '.$e->getMessage(),
+                    null,
+                    $e,
+                );
+            }
+        }
+
+        if ($response === null) {
+            throw new LlmRequestException(
+                'OpenRouter request failed to connect'.($lastConnectionError ? ': '.$lastConnectionError->getMessage() : '.'),
+                null,
+                $lastConnectionError,
+            );
         }
 
         if ($response->failed()) {

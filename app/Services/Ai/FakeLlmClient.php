@@ -22,13 +22,7 @@ class FakeLlmClient implements LlmClient
 
     public function chat(array $messages, array $options = []): LlmChatResult
     {
-        $lastUser = '';
-        foreach (array_reverse($messages) as $message) {
-            if (($message['role'] ?? null) === 'user' && is_string($message['content'] ?? null)) {
-                $lastUser = $message['content'];
-                break;
-            }
-        }
+        $lastUser = $this->extractUserText($messages);
 
         if (str_contains($lastUser, self::FAIL_MARKER)) {
             throw new LlmRequestException('Fake LLM forced failure.', 500);
@@ -52,5 +46,42 @@ class FakeLlmClient implements LlmClient
                 'total_tokens' => 2,
             ],
         );
+    }
+
+    /**
+     * @param  list<array{role?: string, content?: mixed}>  $messages
+     */
+    private function extractUserText(array $messages): string
+    {
+        foreach (array_reverse($messages) as $message) {
+            if (($message['role'] ?? null) !== 'user') {
+                continue;
+            }
+
+            $content = $message['content'] ?? null;
+            if (is_string($content)) {
+                return $content;
+            }
+
+            if (! is_array($content)) {
+                continue;
+            }
+
+            $parts = [];
+            foreach ($content as $part) {
+                if (! is_array($part)) {
+                    continue;
+                }
+                if (($part['type'] ?? null) === 'text' && isset($part['text']) && is_string($part['text'])) {
+                    $parts[] = $part['text'];
+                }
+            }
+
+            if ($parts !== []) {
+                return implode("\n", $parts);
+            }
+        }
+
+        return '';
     }
 }

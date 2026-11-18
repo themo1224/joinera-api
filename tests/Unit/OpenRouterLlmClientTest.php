@@ -73,6 +73,66 @@ class OpenRouterLlmClientTest extends TestCase
         });
     }
 
+    public function test_open_router_chat_forwards_plugins_and_multimodal_content(): void
+    {
+        config([
+            'joinera.ai.openrouter.api_key' => 'test-key',
+            'joinera.ai.openrouter.base_url' => 'https://openrouter.ai/api/v1',
+            'joinera.ai.openrouter.model' => 'openai/gpt-4o-mini',
+            'joinera.ai.openrouter.fallback_models' => [],
+            'joinera.ai.openrouter.app_title' => 'Joinera',
+            'joinera.ai.openrouter.timeout' => 10,
+        ]);
+
+        Http::fake([
+            'openrouter.ai/api/v1/chat/completions' => Http::response([
+                'id' => 'gen-2',
+                'model' => 'openai/gpt-4o-mini',
+                'choices' => [
+                    [
+                        'finish_reason' => 'stop',
+                        'message' => [
+                            'role' => 'assistant',
+                            'content' => '{"suggested_name":"Ada"}',
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $result = app(OpenRouterLlmClient::class)->chat([
+            [
+                'role' => 'user',
+                'content' => [
+                    ['type' => 'text', 'text' => 'Extract fields'],
+                    [
+                        'type' => 'file',
+                        'file' => [
+                            'filename' => 'cv.pdf',
+                            'file_data' => 'data:application/pdf;base64,AAA',
+                        ],
+                    ],
+                ],
+            ],
+        ], [
+            'temperature' => 0,
+            'plugins' => [
+                ['id' => 'file-parser', 'pdf' => ['engine' => 'mistral-ocr']],
+            ],
+        ]);
+
+        $this->assertSame('{"suggested_name":"Ada"}', $result->content);
+
+        Http::assertSent(function ($request): bool {
+            $data = $request->data();
+            $content = $data['messages'][0]['content'] ?? null;
+
+            return is_array($content)
+                && ($data['plugins'][0]['id'] ?? null) === 'file-parser'
+                && ($data['plugins'][0]['pdf']['engine'] ?? null) === 'mistral-ocr';
+        });
+    }
+
     public function test_open_router_chat_throws_on_http_error(): void
     {
         config([

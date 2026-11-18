@@ -17,7 +17,8 @@ class StoreCvRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'cv' => ['required', 'file', 'mimes:pdf', 'mimetypes:application/pdf', 'max:10240'],
+            // 25MB — Bewerbungs packs (CamScanner multi-doc) often exceed 10MB.
+            'cv' => ['required', 'file', 'mimes:pdf', 'mimetypes:application/pdf', 'max:25600'],
         ];
     }
 }

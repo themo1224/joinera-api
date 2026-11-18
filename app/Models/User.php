@@ -52,6 +52,14 @@ class User extends Authenticatable
     }
 
     /**
+     * @return HasMany<ProfileDocumentAsset, $this>
+     */
+    public function profileDocumentAssets(): HasMany
+    {
+        return $this->hasMany(ProfileDocumentAsset::class);
+    }
+
+    /**
      * @return HasOne<MailboxIdentity, $this>
      */
     public function mailboxIdentity(): HasOne

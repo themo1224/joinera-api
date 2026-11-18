@@ -6,6 +6,7 @@ use App\Contracts\ArbeitsagenturDeHttpClient;
 use App\Contracts\AusbildungDeHttpClient;
 use App\Contracts\AzubiyoHttpClient;
 use App\Contracts\CvParser;
+use App\Contracts\DocumentOcrClient;
 use App\Contracts\DomainRegistrar;
 use App\Contracts\LlmClient;
 use App\Contracts\MailboxInboundSync;
@@ -21,6 +22,7 @@ use App\Listeners\DispatchMatchListingOnListingCreated;
 use App\Listeners\DispatchRematchOnCandidateMatchRecomputeRequested;
 use App\Listeners\DispatchRematchOnProfilePrioritiesChanged;
 use App\Services\Ai\FakeLlmClient;
+use App\Services\Ai\GeminiLlmClient;
 use App\Services\Ai\OpenRouterLlmClient;
 use App\Services\Apply\FixtureModeBBrowserAdapter;
 use App\Services\Apply\HttpModeBBrowserAdapter;
@@ -38,6 +40,9 @@ use App\Services\Docs\DompdfPdfRenderer;
 use App\Services\Docs\FakePdfRenderer;
 use App\Services\FakeMailboxInboundSync;
 use App\Services\FakeMailboxOutboundMailer;
+use App\Services\DocumentIngestionCvParser;
+use App\Services\Documents\Ocr\NullDocumentOcrClient;
+use App\Services\Documents\Ocr\TesseractDocumentOcrClient;
 use App\Services\FixtureCvParser;
 use App\Services\Gmx\GmxImapSync;
 use App\Services\Gmx\GmxSmtpMailer;
@@ -57,7 +62,23 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->bind(CvParser::class, FixtureCvParser::class);
+        $this->app->bind(CvParser::class, function ($app) {
+            if ($this->useFixtureCvParser()) {
+                return $app->make(FixtureCvParser::class);
+            }
+
+            return $app->make(DocumentIngestionCvParser::class);
+        });
+
+        $this->app->bind(DocumentOcrClient::class, function ($app) {
+            if ($this->useNullDocumentOcr()) {
+                return $app->make(NullDocumentOcrClient::class);
+            }
+
+            $client = $app->make(TesseractDocumentOcrClient::class);
+
+            return $client->isAvailable() ? $client : $app->make(NullDocumentOcrClient::class);
+        });
         $this->app->bind(ModeBBrowserPort::class, function ($app) {
             if ($this->useFixtureModeBBrowser()) {
                 return $app->make(FixtureModeBBrowserAdapter::class);
@@ -70,6 +91,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(LlmClient::class, function ($app) {
             if ($this->useFakeLlmClient()) {
                 return $app->make(FakeLlmClient::class);
+            }
+
+            $driver = (string) config('joinera.ai.driver', 'openrouter');
+            if ($driver === 'gemini') {
+                return $app->make(GeminiLlmClient::class);
             }
 
             return $app->make(OpenRouterLlmClient::class);
@@ -210,5 +236,19 @@ class AppServiceProvider extends ServiceProvider
         $driver = config('joinera.mode_b.driver', 'fixture');
 
         return $driver === 'fixture' || $this->app->environment('testing');
+    }
+
+    private function useFixtureCvParser(): bool
+    {
+        $driver = config('joinera.documents.cv_parser', 'ingestion');
+
+        return $driver === 'fixture' || $this->app->environment('testing');
+    }
+
+    private function useNullDocumentOcr(): bool
+    {
+        $driver = config('joinera.documents.ocr', 'tesseract');
+
+        return $driver === 'null' || $this->app->environment('testing');
     }
 }

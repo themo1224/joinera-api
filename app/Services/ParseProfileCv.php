@@ -9,6 +9,7 @@ use App\Exceptions\CvUnreadableException;
 use App\Models\Profile;
 use App\Models\User;
 use App\Support\CvParseResult;
+use App\Support\MergeProfileLanguages;
 
 class ParseProfileCv
 {
@@ -17,10 +18,12 @@ class ParseProfileCv
     }
 
     /**
+     * @return array{profile: Profile, result: CvParseResult}
+     *
      * @throws CvUnreadableException
      * @throws CvMissingException
      */
-    public function handle(User $user): Profile
+    public function handle(User $user): array
     {
         $profile = $user->ensureProfile();
         $asset = $user->cvAsset;
@@ -28,6 +31,8 @@ class ParseProfileCv
         if ($asset === null) {
             throw new CvMissingException('A CV must be uploaded before parsing.');
         }
+
+        $asset->loadMissing('user');
 
         try {
             $result = $this->parser->parse($asset);
@@ -38,14 +43,18 @@ class ParseProfileCv
             throw $exception;
         }
 
-        $this->applyResult($profile, $result);
+        $this->applyResult($user, $profile, $result);
         $profile->parse_status = ParseStatus::Parsed;
         $profile->save();
+        $user->save();
 
-        return $profile->fresh() ?? $profile;
+        return [
+            'profile' => $profile->fresh() ?? $profile,
+            'result' => $result,
+        ];
     }
 
-    private function applyResult(Profile $profile, CvParseResult $result): void
+    private function applyResult(User $user, Profile $profile, CvParseResult $result): void
     {
         foreach ($result->presentFields() as $field => $value) {
             if ($profile->isFieldEdited($field)) {
@@ -54,5 +63,41 @@ class ParseProfileCv
 
             $profile->{$field} = $value;
         }
+
+        if ($result->autoApplyBlocked) {
+            return;
+        }
+
+        $suggestedName = $result->effectiveSuggestedName();
+        if ($suggestedName !== null) {
+            $user->name = $suggestedName;
+        }
+
+        foreach ($result->presentStructuredFields() as $field => $value) {
+            if ($profile->isFieldEdited($field)) {
+                continue;
+            }
+
+            if ($field === 'languages' && is_array($value)) {
+                $profile->languages = MergeProfileLanguages::merge(
+                    is_array($profile->languages) ? $profile->languages : [],
+                    $value
+                );
+                continue;
+            }
+
+            // Only fill empty structured arrays / null scalars.
+            $current = $profile->{$field};
+            if (is_array($current) && $current !== []) {
+                continue;
+            }
+            if (is_string($current) && trim($current) !== '') {
+                continue;
+            }
+
+            $profile->{$field} = $value;
+        }
+
+        $profile->syncEducationFromEntriesIfEmpty();
     }
 }

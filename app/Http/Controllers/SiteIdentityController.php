@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Exceptions\SharedSiteLoginException;
 use App\Exceptions\SitesUnconfiguredException;
 use App\Exceptions\UnknownSiteException;
 use App\Http\Requests\StoreSiteIdentityRequest;
@@ -35,11 +34,6 @@ class SiteIdentityController extends Controller
                 'code' => 'unknown_site',
                 'message' => 'That site is not configured.',
             ], 422);
-        } catch (SharedSiteLoginException) {
-            return response()->json([
-                'code' => 'shared_site_login',
-                'message' => 'That site login is already used by another user.',
-            ], 409);
         }
 
         $status = $identity->wasRecentlyCreated ? 201 : 200;

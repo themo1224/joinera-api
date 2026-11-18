@@ -64,7 +64,7 @@ class SiteIdentityTest extends TestCase
         $this->assertNotSame('secret-password', $row->getRawOriginal('secret'));
     }
 
-    public function test_second_user_same_site_and_site_login_gets_409(): void
+    public function test_second_user_may_reuse_same_site_and_site_login(): void
     {
         $this->configureSites(['stepstone']);
 
@@ -85,10 +85,9 @@ class SiteIdentityTest extends TestCase
                 'site_login' => 'shared@example.com',
                 'secret' => 'two',
             ])
-            ->assertStatus(409)
-            ->assertJsonPath('code', 'shared_site_login');
+            ->assertCreated();
 
-        $this->assertSame(1, SiteIdentity::query()->count());
+        $this->assertSame(2, SiteIdentity::query()->count());
     }
 
     public function test_site_outside_sites_v1_is_422(): void
@@ -184,11 +183,46 @@ class SiteIdentityTest extends TestCase
 
         $response = $this->actingAs($staff, 'sanctum')
             ->getJson('/api/v1/users/'.$user->id.'/site-identities')
-            ->assertOk();
+            ->assertOk()
+            ->assertJsonPath('availableSites', ['stepstone']);
 
         $payload = $response->json('data.0');
         $this->assertSame(['site', 'site_login', 'state'], array_keys($payload));
         $this->assertArrayNotHasKey('secret', $payload);
+    }
+
+    public function test_admin_can_store_site_identity_for_applicant(): void
+    {
+        $this->configureSites(['azubiyo', 'ausbildung.de']);
+
+        $applicant = User::factory()->create();
+        $admin = User::factory()->admin()->create();
+        $staff = User::factory()->staff()->create();
+
+        $this->actingAs($staff, 'sanctum')
+            ->postJson('/api/v1/users/'.$applicant->id.'/site-identities', [
+                'site' => 'azubiyo',
+                'site_login' => 'staff-try@example.com',
+                'secret' => 'nope',
+            ])
+            ->assertForbidden();
+
+        $this->actingAs($admin, 'sanctum')
+            ->postJson('/api/v1/users/'.$applicant->id.'/site-identities', [
+                'site' => 'azubiyo',
+                'site_login' => 'anna@example.com',
+                'secret' => 'secret-password',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('site', 'azubiyo')
+            ->assertJsonPath('site_login', 'anna@example.com')
+            ->assertJsonMissingPath('secret');
+
+        $this->assertDatabaseHas('site_identities', [
+            'user_id' => $applicant->id,
+            'site' => 'azubiyo',
+            'site_login' => 'anna@example.com',
+        ]);
     }
 
     /**

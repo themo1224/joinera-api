@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Enums\SiteIdentityState;
-use App\Exceptions\SharedSiteLoginException;
 use App\Exceptions\SitesUnconfiguredException;
 use App\Exceptions\UnknownSiteException;
 use App\Models\SiteIdentity;
@@ -23,16 +22,7 @@ class StoreSiteIdentity
             throw new UnknownSiteException;
         }
 
-        $takenByOther = SiteIdentity::query()
-            ->where('site', $site)
-            ->where('site_login', $siteLogin)
-            ->where('user_id', '!=', $user->id)
-            ->exists();
-
-        if ($takenByOther) {
-            throw new SharedSiteLoginException;
-        }
-
+        // Same site_login may be reused across candidates (admin/demo).
         $identity = SiteIdentity::query()->firstOrNew([
             'user_id' => $user->id,
             'site' => $site,

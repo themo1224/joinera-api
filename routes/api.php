@@ -79,6 +79,7 @@ Route::prefix('v1')->group(function () {
         Route::get('users/{user}/mailbox/messages/{message}', [StaffMailboxController::class, 'showMessage'])->middleware('staff');
         Route::post('users/{user}/mailbox/messages/{message}/reply', [StaffMailboxController::class, 'reply'])->middleware('staff');
         Route::get('users/{user}/site-identities', [StaffSiteIdentityController::class, 'index'])->middleware('staff');
+        Route::post('users/{user}/site-identities', [StaffSiteIdentityController::class, 'store'])->middleware('admin');
         Route::get('users/{user}/identity/readiness', [StaffIdentityReadinessController::class, 'show'])->middleware('staff');
 
         Route::get('matches', [StaffMatchController::class, 'index'])->middleware('staff');

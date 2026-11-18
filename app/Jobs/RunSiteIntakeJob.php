@@ -12,6 +12,11 @@ class RunSiteIntakeJob implements ShouldQueue
 {
     use Queueable;
 
+    /**
+     * Intake can fetch many listing detail pages; keep above DB retry_after floor.
+     */
+    public int $timeout = 540;
+
     public function __construct(
         public readonly int $intakeRunId,
         public readonly string $site,

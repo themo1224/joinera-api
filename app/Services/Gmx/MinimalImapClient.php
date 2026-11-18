@@ -264,10 +264,11 @@ class MinimalImapClient
             $tag = sprintf('A%03d', 100 + $index);
 
             try {
-                // Partial first body part (<8 KiB) avoids multi-MB literals that stall/drop the socket.
+                // Partial body parts (<16 KiB) avoid multi-MB literals that stall/drop the socket.
+                // Part 1 is usually text/plain; part 2 is often text/html in multipart/alternative.
                 $this->write(
                     $socket,
-                    "{$tag} UID FETCH {$uid} (BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE MESSAGE-ID)] BODY.PEEK[1]<0.8191>)",
+                    "{$tag} UID FETCH {$uid} (BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE MESSAGE-ID)] BODY.PEEK[1]<0.16383> BODY.PEEK[2]<0.16383>)",
                 );
                 $fetch = $this->readUntilTagged($socket, $tag);
             } catch (RuntimeException $exception) {
@@ -411,7 +412,27 @@ class MinimalImapClient
         $date = $this->headerValue($fetch, 'Date');
         $messageId = $this->headerValue($fetch, 'Message-ID') ?? $this->headerValue($fetch, 'Message-Id');
 
-        $body = $this->extractBodyText($fetch);
+        $part1 = $this->extractBodySectionRaw($fetch, '1') ?? $this->extractBodySectionRaw($fetch, 'TEXT');
+        $part2 = $this->extractBodySectionRaw($fetch, '2');
+
+        $bodyText = $part1 !== null ? $this->normalizePlainBody($part1) : null;
+        $bodyHtml = null;
+
+        foreach ([$part2, $part1] as $candidate) {
+            if ($candidate === null) {
+                continue;
+            }
+            $html = $this->normalizeHtmlBody($candidate);
+            if ($html !== null) {
+                $bodyHtml = $html;
+                break;
+            }
+        }
+
+        // If part1 was HTML-only (no plain), keep a text fallback from stripped HTML.
+        if (($bodyText === null || $bodyText === '' || $bodyText === '[multipart body omitted]') && $bodyHtml !== null) {
+            $bodyText = trim(html_entity_decode(strip_tags($bodyHtml), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        }
 
         $receivedAt = null;
         if (is_string($date) && $date !== '') {
@@ -433,7 +454,7 @@ class MinimalImapClient
         $fromAddress = $this->extractEmail($from) ?: $from;
         $toAddress = $this->extractEmail($to) ?: $to;
 
-        if ($fromAddress === '' && $toAddress === '' && $subject === '' && ($body === null || $body === '')) {
+        if ($fromAddress === '' && $toAddress === '' && $subject === '' && ($bodyText === null || $bodyText === '')) {
             return null;
         }
 
@@ -442,47 +463,41 @@ class MinimalImapClient
             'from_address' => $fromAddress !== '' ? $fromAddress : 'unknown@gmx.local',
             'to_address' => $toAddress,
             'subject' => $subject,
-            'body_text' => $body,
-            'body_html' => null,
+            'body_text' => $bodyText,
+            'body_html' => $bodyHtml,
             'received_at' => $receivedAt,
         ];
     }
 
-    private function extractBodyText(string $fetch): ?string
+    private function extractBodySectionRaw(string $fetch, string $section): ?string
     {
         // Partial fetches reply as BODY[1]<0> {n}; full fetches as BODY[1] {n}.
-        foreach (['BODY\[1\](?:<\d+>)?', 'BODY\[TEXT\](?:<\d+>)?'] as $section) {
-            if (preg_match('/'.$section.'\s*\{(\d+)\}\n/s', $fetch, $matches, PREG_OFFSET_CAPTURE)) {
-                $length = (int) $matches[1][0];
-                $start = $matches[0][1] + strlen($matches[0][0]);
-                $body = substr($fetch, $start, $length);
+        $pattern = 'BODY\['.preg_quote($section, '/').'\](?:<\d+>)?';
 
-                return $body === false || $body === '' ? null : $this->normalizeBody($body);
-            }
+        if (preg_match('/'.$pattern.'\s*\{(\d+)\}\n/s', $fetch, $matches, PREG_OFFSET_CAPTURE)) {
+            $length = (int) $matches[1][0];
+            $start = $matches[0][1] + strlen($matches[0][0]);
+            $body = substr($fetch, $start, $length);
 
-            if (preg_match('/'.$section.'\s+"((?:\\\\.|[^"\\\\])*)"/s', $fetch, $matches)) {
-                return $this->normalizeBody(stripcslashes($matches[1]));
-            }
+            return $body === false || $body === '' ? null : $body;
+        }
 
-            if (preg_match('/'.$section.'\s+NIL/i', $fetch)) {
-                return null;
-            }
+        if (preg_match('/'.$pattern.'\s+"((?:\\\\.|[^"\\\\])*)"/s', $fetch, $matches)) {
+            return stripcslashes($matches[1]);
+        }
+
+        if (preg_match('/'.$pattern.'\s+NIL/i', $fetch)) {
+            return null;
         }
 
         return null;
     }
 
-    private function normalizeBody(string $body): string
+    private function normalizePlainBody(string $body): string
     {
         $body = str_replace("\0", '', $body);
-        $body = $this->extractPlainTextFromMime($body);
-        $decoded = quoted_printable_decode($body);
-        $decoded = str_replace("\r\n", "\n", $decoded);
-
-        if (! mb_check_encoding($decoded, 'UTF-8')) {
-            $converted = @mb_convert_encoding($decoded, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252');
-            $decoded = is_string($converted) ? $converted : preg_replace('/[^\x09\x0A\x0D\x20-\x7E]/', '?', $decoded) ?? '';
-        }
+        $body = $this->extractMimePart($body, 'text/plain') ?? $this->extractPlainTextFromMime($body);
+        $decoded = $this->decodeTransfer($body);
 
         // Strip leftover base64/PDF blobs that slipped through multipart peel.
         if (preg_match('/^%PDF-/m', $decoded) || preg_match('/^JVBERi0/m', $decoded)) {
@@ -496,18 +511,95 @@ class MinimalImapClient
         return trim($decoded);
     }
 
+    private function normalizeHtmlBody(string $body): ?string
+    {
+        $body = str_replace("\0", '', $body);
+        $htmlPart = $this->extractMimePart($body, 'text/html');
+
+        if ($htmlPart === null) {
+            // Bare HTML part (no MIME headers) — accept if it looks like markup.
+            $probe = quoted_printable_decode($body);
+            if (! preg_match('/<(?:html|body|div|p|a|table|br|span)\b/i', $probe)) {
+                return null;
+            }
+            // Reject if this is clearly plain text that happens to mention a tag word.
+            if (preg_match('/Content-Type:\s*text\/plain/i', $body)) {
+                return null;
+            }
+            $htmlPart = $body;
+        }
+
+        $decoded = $this->decodeTransfer($htmlPart);
+
+        if (! preg_match('/<(?:html|body|div|p|a|table|br|span)\b/i', $decoded)) {
+            return null;
+        }
+
+        if (strlen($decoded) > 60_000) {
+            $decoded = substr($decoded, 0, 60_000)."\n…[truncated]";
+        }
+
+        return trim($decoded) !== '' ? trim($decoded) : null;
+    }
+
+    private function decodeTransfer(string $body): string
+    {
+        $encoding = null;
+        if (preg_match('/Content-Transfer-Encoding:\s*([^\s;]+)/i', $body, $matches)) {
+            $encoding = strtolower(trim($matches[1]));
+        }
+
+        // Drop MIME headers if present so only the payload remains.
+        if (preg_match('/\r?\n\r?\n(.*)\z/s', $body, $parts)) {
+            $payload = $parts[1];
+        } else {
+            $payload = $body;
+        }
+
+        $decoded = match ($encoding) {
+            'base64' => base64_decode(preg_replace('/\s+/', '', $payload) ?? '', true) ?: $payload,
+            'quoted-printable' => quoted_printable_decode($payload),
+            default => quoted_printable_decode($payload),
+        };
+
+        $decoded = str_replace("\r\n", "\n", $decoded);
+
+        if (! mb_check_encoding($decoded, 'UTF-8')) {
+            $converted = @mb_convert_encoding($decoded, 'UTF-8', 'UTF-8, ISO-8859-1, Windows-1252');
+            $decoded = is_string($converted) ? $converted : preg_replace('/[^\x09\x0A\x0D\x20-\x7E]/', '?', $decoded) ?? '';
+        }
+
+        return $decoded;
+    }
+
+    private function extractMimePart(string $raw, string $contentType): ?string
+    {
+        if (! str_contains($raw, 'Content-Type:')) {
+            return null;
+        }
+
+        $type = preg_quote($contentType, '/');
+        // Return headers + body so decodeTransfer can read Content-Transfer-Encoding.
+        if (preg_match(
+            '/(Content-Type:\s*'.$type.'[^\n]*\n(?:[^\n]+:[^\n]*\n)*\s*\n.*?)(?=\n------=|\n--[A-Za-z0-9_\/=+-]+|\n--|_Part_|\z)/is',
+            $raw,
+            $matches,
+        )) {
+            return trim($matches[1]);
+        }
+
+        return null;
+    }
+
     private function extractPlainTextFromMime(string $raw): string
     {
         if (! str_contains($raw, 'Content-Type:') && ! str_contains($raw, '------=')) {
             return $raw;
         }
 
-        if (preg_match(
-            '/Content-Type:\s*text\/plain[^\n]*\n(?:[^\n]+:[^\n]*\n)*\s*\n(.*?)(?=\n------=|\n--|_Part_|\z)/is',
-            $raw,
-            $matches,
-        )) {
-            return trim($matches[1]);
+        $plain = $this->extractMimePart($raw, 'text/plain');
+        if ($plain !== null) {
+            return $plain;
         }
 
         // Multipart with no clearly marked text/plain — keep a short head only.

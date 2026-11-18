@@ -43,6 +43,7 @@ return [
                 'search_url' => env('JOINERA_AUSBILDUNG_DE_SEARCH_URL', 'https://www.ausbildung.de/suche/'),
                 'base_url' => env('JOINERA_AUSBILDUNG_DE_BASE_URL', 'https://www.ausbildung.de'),
                 'max_pages' => max(1, (int) env('JOINERA_AUSBILDUNG_DE_MAX_PAGES', 5)),
+                'http_timeout' => max(5, (int) env('JOINERA_AUSBILDUNG_DE_HTTP_TIMEOUT', 30)),
                 // live | fake — testing env always uses Fake in AppServiceProvider.
                 'http' => env('JOINERA_AUSBILDUNG_DE_HTTP', 'live'),
             ],

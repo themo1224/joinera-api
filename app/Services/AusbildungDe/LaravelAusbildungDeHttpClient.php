@@ -12,7 +12,10 @@ class LaravelAusbildungDeHttpClient implements AusbildungDeHttpClient
      */
     public function get(string $url, array $options = []): string
     {
-        return Http::withOptions($options)
+        $timeout = max(5, (int) config('joinera.sites.adapters.ausbildung_de.http_timeout', 30));
+
+        return Http::timeout($timeout)
+            ->withOptions($options)
             ->get($url)
             ->throw()
             ->body();

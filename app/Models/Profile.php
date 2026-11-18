@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'desired_path',
     'preferred_occupation',
     'available_from',
+    'availability_seasons',
     'willing_to_relocate',
     'education_entries',
     'experiences',
@@ -30,6 +31,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'driving_licenses',
     'work_residence_note',
     'about',
+    'date_of_birth',
     'parse_status',
     'user_edited_fields',
     'priorities',
@@ -46,7 +48,20 @@ class Profile extends Model
 
     public const DESIRED_PATHS = ['ausbildung', 'job', 'either'];
 
-    private const NAMED_FIELDS = ['industry', 'language'];
+    private const NAMED_FIELDS = [
+        'industry',
+        'language',
+        'education',
+        'desired_path',
+        'preferred_occupation',
+        'about',
+        'date_of_birth',
+        'education_entries',
+        'experiences',
+        'skills',
+        'languages',
+        'driving_licenses',
+    ];
 
     /**
      * @return BelongsTo<User, $this>
@@ -71,12 +86,14 @@ class Profile extends Model
             'approval' => ApprovalStatus::class,
             'approved_at' => 'datetime',
             'available_from' => 'date',
+            'availability_seasons' => 'array',
             'willing_to_relocate' => 'boolean',
             'education_entries' => 'array',
             'experiences' => 'array',
             'skills' => 'array',
             'languages' => 'array',
             'driving_licenses' => 'array',
+            'date_of_birth' => 'date',
         ];
     }
 
@@ -307,6 +324,7 @@ class Profile extends Model
             'desired_path' => $this->desired_path,
             'preferred_occupation' => $this->preferred_occupation,
             'available_from' => $this->available_from?->format('Y-m-d'),
+            'availability_seasons' => $this->availability_seasons ?? [],
             'willing_to_relocate' => $this->willing_to_relocate,
             'education_entries' => $this->education_entries ?? [],
             'experiences' => $this->experiences ?? [],
@@ -315,9 +333,15 @@ class Profile extends Model
             'driving_licenses' => $this->driving_licenses ?? [],
             'work_residence_note' => $this->work_residence_note,
             'about' => $this->about,
+            'date_of_birth' => $this->date_of_birth?->format('Y-m-d'),
             'complete' => $this->isComplete($cvAsset),
             'parse_status' => ($this->parse_status ?? ParseStatus::Unparsed)->value,
             'approval' => ($this->approval ?? ApprovalStatus::Pending)->value,
+            'documents' => $this->user?->relationLoaded('profileDocumentAssets')
+                ? $this->user->profileDocumentAssets->map(
+                    static fn (ProfileDocumentAsset $asset): array => $asset->toPublicArray(),
+                )->values()->all()
+                : [],
         ];
     }
 

@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Casts\StringListCast;
 use App\Models\Profile;
+use App\Support\AvailabilitySeasons;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -58,6 +59,9 @@ class UpdateProfileRequest extends FormRequest
             'desired_path' => ['sometimes', 'nullable', 'string', Rule::in(Profile::DESIRED_PATHS)],
             'preferred_occupation' => ['sometimes', 'nullable', 'string', 'max:255'],
             'available_from' => ['sometimes', 'nullable', 'date'],
+            'availability_seasons' => ['sometimes', 'nullable', 'array', 'max:12'],
+            'availability_seasons.*.season' => ['required', 'string', Rule::in(AvailabilitySeasons::SEASONS)],
+            'availability_seasons.*.year' => ['required', 'integer', 'min:2000', 'max:2100'],
             'willing_to_relocate' => ['sometimes', 'nullable', 'boolean'],
             'education_entries' => ['sometimes', 'nullable', 'array', 'max:20'],
             'education_entries.*.level' => ['nullable', 'string', 'max:255'],
@@ -85,6 +89,7 @@ class UpdateProfileRequest extends FormRequest
             'driving_licenses.*' => ['string', 'max:32'],
             'work_residence_note' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'about' => ['sometimes', 'nullable', 'string', 'max:2000'],
+            'date_of_birth' => ['sometimes', 'nullable', 'date'],
         ];
     }
 
@@ -137,6 +142,14 @@ class UpdateProfileRequest extends FormRequest
             $fields['available_from'] = $raw === null || $raw === '' ? null : (string) $raw;
         }
 
+        // When seasons are sent (including []), normalize and derive available_from.
+        // A lone available_from without seasons leaves availability_seasons unchanged.
+        if ($this->exists('availability_seasons')) {
+            $seasons = AvailabilitySeasons::normalize($this->input('availability_seasons'));
+            $fields['availability_seasons'] = $seasons === [] ? null : $seasons;
+            $fields['available_from'] = AvailabilitySeasons::earliestDate($seasons);
+        }
+
         if ($this->exists('willing_to_relocate')) {
             $fields['willing_to_relocate'] = $this->input('willing_to_relocate') === null
                 ? null
@@ -161,6 +174,11 @@ class UpdateProfileRequest extends FormRequest
 
         if ($this->exists('driving_licenses')) {
             $fields['driving_licenses'] = $this->normalizeDrivingLicenses($this->input('driving_licenses'));
+        }
+
+        if ($this->exists('date_of_birth')) {
+            $raw = $this->input('date_of_birth');
+            $fields['date_of_birth'] = $raw === null || $raw === '' ? null : (string) $raw;
         }
 
         return $fields;

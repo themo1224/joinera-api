@@ -447,6 +447,53 @@ class ProfileTest extends TestCase
             ->assertJsonMissingPath('province');
     }
 
+    public function test_staff_availability_seasons_derive_available_from_and_round_trip(): void
+    {
+        $candidate = User::factory()->create();
+        $staff = User::factory()->staff()->create();
+
+        $this->actingAs($staff, 'sanctum')
+            ->putJson('/api/v1/users/'.$candidate->id.'/profile', [
+                'industry' => 'IT',
+                'language' => 'de',
+                'education' => 'Abitur',
+                'desired_path' => 'ausbildung',
+                'availability_seasons' => [
+                    ['season' => 'spring', 'year' => 2027],
+                    ['season' => 'summer', 'year' => 2026],
+                    ['season' => 'summer', 'year' => 2026],
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonPath('available_from', '2026-06-01')
+            ->assertJsonPath('availability_seasons.0.season', 'summer')
+            ->assertJsonPath('availability_seasons.0.year', 2026)
+            ->assertJsonPath('availability_seasons.1.season', 'spring')
+            ->assertJsonPath('availability_seasons.1.year', 2027);
+
+        $this->actingAs($staff, 'sanctum')
+            ->getJson('/api/v1/applicants/'.$candidate->id)
+            ->assertOk()
+            ->assertJsonPath('availableFrom', '2026-06-01')
+            ->assertJsonPath('availabilitySeasons.0.season', 'summer')
+            ->assertJsonPath('availabilitySeasons.0.year', 2026)
+            ->assertJsonPath('availabilitySeasons.1.season', 'spring')
+            ->assertJsonPath('availabilitySeasons.1.year', 2027);
+
+        $this->actingAs($staff, 'sanctum')
+            ->putJson('/api/v1/users/'.$candidate->id.'/profile', [
+                'availability_seasons' => [],
+            ])
+            ->assertOk()
+            ->assertJsonPath('available_from', null)
+            ->assertJsonPath('availability_seasons', []);
+
+        $this->assertDatabaseHas('profiles', [
+            'user_id' => $candidate->id,
+            'available_from' => null,
+        ]);
+    }
+
     public function test_admin_can_update_candidate_profile_fields(): void
     {
         $candidate = User::factory()->create();

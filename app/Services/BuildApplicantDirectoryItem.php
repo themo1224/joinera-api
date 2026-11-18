@@ -23,7 +23,7 @@ class BuildApplicantDirectoryItem
             abort(404);
         }
 
-        $user->loadMissing(['profile.approvedBy', 'cvAsset', 'mailboxIdentity']);
+        $user->loadMissing(['profile.approvedBy', 'cvAsset', 'profileDocumentAssets', 'mailboxIdentity']);
 
         $profile = $user->profile;
         $mailbox = $user->mailboxIdentity;
@@ -43,6 +43,7 @@ class BuildApplicantDirectoryItem
             'desiredPath' => (string) ($profile?->desired_path ?? ''),
             'preferredOccupation' => (string) ($profile?->preferred_occupation ?? ''),
             'availableFrom' => $profile?->available_from?->format('Y-m-d'),
+            'availabilitySeasons' => $profile?->availability_seasons ?? [],
             'willingToRelocate' => $profile?->willing_to_relocate,
             'educationEntries' => $profile?->education_entries ?? [],
             'experiences' => $profile?->experiences ?? [],
@@ -51,7 +52,13 @@ class BuildApplicantDirectoryItem
             'drivingLicenses' => $profile?->driving_licenses ?? [],
             'workResidenceNote' => (string) ($profile?->work_residence_note ?? ''),
             'about' => (string) ($profile?->about ?? ''),
+            'dateOfBirth' => $profile?->date_of_birth?->format('Y-m-d'),
+            'documents' => $user->profileDocumentAssets
+                ->map(static fn ($asset): array => $asset->toPublicArray())
+                ->values()
+                ->all(),
             'hasCv' => $user->cvAsset !== null,
+            'cvOriginalName' => $user->cvAsset?->original_name,
             'profileComplete' => $profile?->isComplete($user->cvAsset) ?? false,
             'approval' => $approval,
             'approvedById' => $approvedBy !== null ? (string) $approvedBy->id : null,

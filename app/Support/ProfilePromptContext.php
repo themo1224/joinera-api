@@ -22,6 +22,9 @@ class ProfilePromptContext
             '- Wunschweg: '.($profile->desired_path ?? ''),
             '- Wunschberuf/-fach: '.($profile->preferred_occupation ?? ''),
             '- Verfügbar ab: '.($profile->available_from?->format('Y-m-d') ?? ''),
+            '- Verfügbare Saisons: '.AvailabilitySeasons::formatLabels(
+                is_array($profile->availability_seasons) ? $profile->availability_seasons : []
+            ),
             '- Umzugsbereit: '.self::boolLabel($profile->willing_to_relocate),
         ];
 

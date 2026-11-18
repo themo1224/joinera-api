@@ -30,6 +30,7 @@ class ProfileFactory extends Factory
             'desired_path' => null,
             'preferred_occupation' => null,
             'available_from' => null,
+            'availability_seasons' => null,
             'willing_to_relocate' => null,
             'education_entries' => null,
             'experiences' => null,

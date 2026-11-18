@@ -26,6 +26,14 @@ class EducationRequirement
      */
     private const ALIASES = [
         'fachabitur' => 'fachhochschulreife',
+        'baccalauréat' => 'abitur',
+        'baccalaureat' => 'abitur',
+        'bac' => 'abitur',
+        'reifezeugnis' => 'abitur',
+        'licence' => 'bachelor',
+        'diplome d\'etudes universitaires generales' => 'bachelor',
+        'diplôme d\'études universitaires générales' => 'bachelor',
+        'deug' => 'bachelor',
     ];
 
     /**

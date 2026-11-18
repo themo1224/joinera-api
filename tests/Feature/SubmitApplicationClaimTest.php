@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\ApplicationStatus;
+use App\Enums\ApplyAttemptKind;
 use App\Enums\ApprovalStatus;
 use App\Enums\SiteIdentityState;
 use App\Jobs\SubmitApplicationJob;
@@ -82,33 +83,42 @@ class SubmitApplicationClaimTest extends TestCase
         $this->assertSame(ApplicationStatus::Submitted, $application->fresh()->status);
     }
 
-    public function test_unapproved_profile_adds_no_attempt(): void
+    public function test_unapproved_profile_writes_hard_fail_attempt(): void
     {
         $application = $this->makeClaimableApplication(approved: false);
 
         $this->runJob($application->id);
 
-        $this->assertSame(0, ApplyAttempt::query()->where('application_id', $application->id)->count());
+        $attempt = ApplyAttempt::query()->where('application_id', $application->id)->first();
+        $this->assertNotNull($attempt);
+        $this->assertSame(ApplyAttemptKind::HardFail, $attempt->kind);
+        $this->assertSame('profile_not_approved', $attempt->stop_reason);
         $this->assertSame(ApplicationStatus::Applying, $application->fresh()->status);
     }
 
-    public function test_paused_site_identity_adds_no_attempt(): void
+    public function test_paused_site_identity_writes_hard_fail_attempt(): void
     {
         $application = $this->makeClaimableApplication(sitePaused: true);
 
         $this->runJob($application->id);
 
-        $this->assertSame(0, ApplyAttempt::query()->where('application_id', $application->id)->count());
+        $attempt = ApplyAttempt::query()->where('application_id', $application->id)->first();
+        $this->assertNotNull($attempt);
+        $this->assertSame(ApplyAttemptKind::HardFail, $attempt->kind);
+        $this->assertSame('no_healthy_site', $attempt->stop_reason);
         $this->assertSame(ApplicationStatus::Applying, $application->fresh()->status);
     }
 
-    public function test_missing_site_identity_adds_no_attempt(): void
+    public function test_missing_site_identity_writes_hard_fail_attempt(): void
     {
         $application = $this->makeClaimableApplication(withSiteIdentity: false);
 
         $this->runJob($application->id);
 
-        $this->assertSame(0, ApplyAttempt::query()->where('application_id', $application->id)->count());
+        $attempt = ApplyAttempt::query()->where('application_id', $application->id)->first();
+        $this->assertNotNull($attempt);
+        $this->assertSame(ApplyAttemptKind::HardFail, $attempt->kind);
+        $this->assertSame('no_healthy_site', $attempt->stop_reason);
         $this->assertSame(ApplicationStatus::Applying, $application->fresh()->status);
     }
 

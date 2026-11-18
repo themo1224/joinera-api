@@ -55,6 +55,11 @@ class SubmitApplicationJob implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        // Claim already finalized a hard_fail (e.g. profile_not_approved / no_healthy_site).
+        if ($attempt->kind !== null) {
+            return;
+        }
+
         $application = Application::query()->find($this->applicationId);
         if ($application === null) {
             return;

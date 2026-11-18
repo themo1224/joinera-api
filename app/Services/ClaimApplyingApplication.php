@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\ApplicationStatus;
+use App\Enums\ApplyAttemptKind;
 use App\Enums\ApprovalStatus;
 use App\Enums\SiteIdentityState;
 use App\Models\Application;
@@ -13,8 +14,9 @@ use Illuminate\Support\Facades\DB;
 /**
  * Exclusive Mode B claim for an Application already in applying.
  *
- * Creates an open ApplyAttempt (kind null). Does not move status, upload docs,
- * or call a browser adapter.
+ * Creates an open ApplyAttempt (kind null) when claimable.
+ * When status is applying but profile/site gates fail, writes a hard_fail
+ * ApplyAttempt with a stop_reason so Staff never see a silent hang.
  */
 class ClaimApplyingApplication
 {
@@ -44,11 +46,11 @@ class ClaimApplyingApplication
             }
 
             if (! $this->profileApproved($application)) {
-                return null;
+                return $this->finalizeHardFail($application, 'profile_not_approved');
             }
 
             if (! $this->siteReady($application)) {
-                return null;
+                return $this->finalizeHardFail($application, 'no_healthy_site');
             }
 
             $attempt = new ApplyAttempt;
@@ -77,5 +79,17 @@ class ClaimApplyingApplication
             ->where('state', SiteIdentityState::Healthy)
             ->where('paused', false)
             ->exists();
+    }
+
+    private function finalizeHardFail(Application $application, string $stopReason): ApplyAttempt
+    {
+        $attempt = new ApplyAttempt;
+        $attempt->application_id = $application->id;
+        $attempt->kind = ApplyAttemptKind::HardFail;
+        $attempt->stop_reason = $stopReason;
+        $attempt->confirmation_reference = null;
+        $attempt->save();
+
+        return $attempt;
     }
 }

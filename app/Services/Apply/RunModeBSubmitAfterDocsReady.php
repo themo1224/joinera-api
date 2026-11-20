@@ -73,6 +73,10 @@ class RunModeBSubmitAfterDocsReady implements ModeBSubmitAfterDocsReady
             $attempt->kind = ApplyAttemptKind::Success;
             $attempt->confirmation_reference = $result->confirmationReference;
             $attempt->stop_reason = null;
+            // Plan 16 — keep form_plan on success for Staff replay/debug.
+            if (is_array($result->formPlan)) {
+                $attempt->form_plan = $result->formPlan;
+            }
             $attempt->save();
 
             $application->refresh();

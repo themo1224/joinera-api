@@ -96,4 +96,25 @@ class HttpModeBBrowserAdapterTest extends TestCase
         $this->assertTrue($result->formPlan['ready'] ?? false);
         $this->assertSame('a@gmx.de', $result->formPlan['answers'][0]['value'] ?? null);
     }
+
+    public function test_maps_form_plan_on_success(): void
+    {
+        Http::fake([
+            'http://mode-b-worker.test/submit' => Http::response([
+                'outcome' => 'success',
+                'confirmation_reference' => 'company-mock-1',
+                'form_plan' => [
+                    'version' => 1,
+                    'ready' => true,
+                    'fill' => ['typed' => ['vorname']],
+                ],
+            ], 200),
+        ]);
+
+        $result = app(HttpModeBBrowserAdapter::class)->submit(1, 'azubiyo', 1);
+
+        $this->assertSame(ModeBBrowserOutcome::Success, $result->outcome);
+        $this->assertSame('company-mock-1', $result->confirmationReference);
+        $this->assertSame(['vorname'], $result->formPlan['fill']['typed'] ?? null);
+    }
 }

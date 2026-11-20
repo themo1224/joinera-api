@@ -16,9 +16,12 @@ final readonly class ModeBBrowserResult
         public ?array $formPlan = null,
     ) {}
 
-    public static function success(string $confirmationReference): self
+    /**
+     * @param  array<string, mixed>|null  $formPlan
+     */
+    public static function success(string $confirmationReference, ?array $formPlan = null): self
     {
-        return new self(ModeBBrowserOutcome::Success, $confirmationReference);
+        return new self(ModeBBrowserOutcome::Success, $confirmationReference, formPlan: $formPlan);
     }
 
     /**

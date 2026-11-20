@@ -69,6 +69,57 @@ class ModeBFormPlanPersistTest extends TestCase
         $this->assertSame('Ada', $attempt->form_plan['answers'][0]['value'] ?? null);
     }
 
+    public function test_success_persists_form_plan_and_confirmation(): void
+    {
+        config(['joinera.queues.apply' => 'apply']);
+
+        $formPlan = [
+            'version' => 1,
+            'ready' => true,
+            'fill' => [
+                'typed' => ['vorname', 'email'],
+                'chosen' => ['stadt'],
+                'attached' => ['lebenslauf'],
+            ],
+            'answers' => [
+                [
+                    'field_id' => 'vorname',
+                    'label' => 'Vorname',
+                    'status' => 'mapped',
+                    'value' => 'Ada',
+                ],
+            ],
+            'missing' => [],
+        ];
+
+        $this->app->instance(ModeBBrowserPort::class, new class($formPlan) implements ModeBBrowserPort
+        {
+            /** @param  array<string, mixed>  $formPlan */
+            public function __construct(private array $formPlan) {}
+
+            public function submit(int $userId, string $siteId, int $applicationId): ModeBBrowserResult
+            {
+                return ModeBBrowserResult::success('company-mock-1', $this->formPlan);
+            }
+        });
+
+        $application = $this->makeReadyApplication();
+
+        $this->app->call([new SubmitApplicationJob($application->id), 'handle']);
+
+        $application->refresh();
+        $this->assertSame(ApplicationStatus::Submitted, $application->status);
+
+        $attempt = ApplyAttempt::query()->where('application_id', $application->id)->first();
+        $this->assertNotNull($attempt);
+        $this->assertSame(ApplyAttemptKind::Success, $attempt->kind);
+        $this->assertSame('company-mock-1', $attempt->confirmation_reference);
+        $this->assertNull($attempt->stop_reason);
+        $this->assertIsArray($attempt->form_plan);
+        $this->assertSame('Ada', $attempt->form_plan['answers'][0]['value'] ?? null);
+        $this->assertContains('vorname', $attempt->form_plan['fill']['typed'] ?? []);
+    }
+
     public function test_missing_info_also_persists_form_plan(): void
     {
         config(['joinera.queues.apply' => 'apply']);

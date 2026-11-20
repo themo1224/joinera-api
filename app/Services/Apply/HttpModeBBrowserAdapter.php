@@ -58,6 +58,7 @@ class HttpModeBBrowserAdapter implements ModeBBrowserPort
         return match ($outcome) {
             ModeBBrowserOutcome::Success => ModeBBrowserResult::success(
                 $confirmation ?? ('worker-'.$applicationId),
+                $formPlan,
             ),
             ModeBBrowserOutcome::IdentityMismatch => ModeBBrowserResult::identityMismatch($detail, $formPlan),
             ModeBBrowserOutcome::Challenge => ModeBBrowserResult::challenge($detail),

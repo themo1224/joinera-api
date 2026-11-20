@@ -39,12 +39,12 @@
 
 | # | Plan name | Short description |
 | --- | --- | --- |
-| 11 | Type the answers | The bot fills text boxes with the right candidate info. |
-| 12 | Choose options | It picks dropdowns, checkboxes, and radio buttons correctly. |
-| 13 | Attach documents | It uploads CV, cover letter, and needed files. |
-| 14 | Hit submit | It presses the company’s apply / send button. |
-| 15 | Confirm success | It checks that the site accepted the application. |
-| 16 | Record the result | Success or failure is saved on the application record. |
+| 11 | Type the answers | The bot fills text boxes with the right candidate info. **Done (2026-11-20):** `typeAnswers` fills mapped text/textarea/email/tel/url/number/date via Playwright `fill`. |
+| 12 | Choose options | It picks dropdowns, checkboxes, and radio buttons correctly. **Done (2026-11-20):** `chooseOptions` handles select/checkbox/radio + consent checks. |
+| 13 | Attach documents | It uploads CV, cover letter, and needed files. **Done (2026-11-20):** `attachDocuments` downloads artifacts and `setInputFiles` on mapped file inputs. |
+| 14 | Hit submit | It presses the company’s apply / send button. **Done (2026-11-20):** `hitSubmit` clicks apply/send submit controls. |
+| 15 | Confirm success | It checks that the site accepted the application. **Done (2026-11-20):** `confirmSuccess` reads `[data-confirmation]` / thank-you text. |
+| 16 | Record the result | Success or failure is saved on the application record. **Done (2026-11-20):** worker `outcome: success` + `form_plan`; Laravel marks Submitted and stores confirmation + plan. |
 
 ---
 
@@ -53,10 +53,10 @@
 
 | # | Plan name | Short description |
 | --- | --- | --- |
-| 17 | Next-page flows | The bot continues when the form has several steps. |
-| 18 | Keep context | Answers from step 1 still make sense on step 2. |
-| 19 | Login walls | If the company forces an account, we detect it cleanly. |
-| 20 | Soft account create | When signup is simple, we try it with the GMX apply email. |
+| 17 | Next-page flows | The bot continues when the form has several steps. **Done (2026-11-20):** step loop with Next/Weiter vs final Absenden; max 5 steps; `form_plan.steps` audit. |
+| 18 | Keep context | Answers from step 1 still make sense on step 2. **Done (2026-11-20):** `mergePriorAnswers` + `answers_all`; overlapping fields reuse prior values. |
+| 19 | Login walls | If the company forces an account, we detect it cleanly. **Done (2026-11-20):** `detectChallenge` login heuristics; per-step check; `login_wall` challenge. |
+| 20 | Soft account create | When signup is simple, we try it with the GMX apply email. **Done (2026-11-20):** one soft signup with GMX email + session password; login-only still hard-stops. |
 | 21 | Privacy / consent | Cookie banners and “I agree” boxes get handled. |
 | 22 | Required traps | Hidden required fields and errors are found and fixed. |
 | 23 | Weird layouts | Unusual pages still get a best-effort fill path. |
@@ -91,7 +91,7 @@
 
 ---
 
-## Plan notes (3–10)
+## Plan notes (3–20)
 
 ### 3 — Stop board apply
 - **Claim:** approved profile + ready GMX + **company** `apply_url`. Board `SiteIdentity` is not required.
@@ -131,8 +131,66 @@
 ### 10 — Save the plan
 - Worker returns `form_plan` (fields, uploads, answers, missing, ready).
 - API stores JSON on `apply_attempts.form_plan` for Staff replay/debug.
-- Ready-but-unfilled stop reason: `form_plan_ready` (fill is plans 11+).
 - **Evidence:** migration `add_form_plan_to_apply_attempts`, `ModeBFormPlanPersistTest`.
+
+### 11 — Type the answers
+- Mapped `text` / `textarea` / `email` / `tel` / `url` / `number` / `date` → Playwright `fill`.
+- Skips select/checkbox/radio/file/consent (plans 12–13).
+- **Evidence:** `form-fill.js` `typeAnswers`, `npm run test:form-fill`.
+
+### 12 — Choose options
+- `selectOption` by label/value; checkboxes/radios/`consent` via `check`.
+- Locates by id, then name, then label (covers privacy without HTML id).
+- **Evidence:** `chooseOptions`, mock `#stadt` + Datenschutz checkbox.
+
+### 13 — Attach documents
+- Downloads artifact URLs to a temp dir, then `setInputFiles` on mapped CV/cover inputs.
+- **Evidence:** `attachDocuments`, company-site mock artifact server.
+
+### 14 — Hit submit
+- Clicks `[data-testid="apply-submit"]` / submit buttons / common DE-EN labels.
+- **Evidence:** `hitSubmit`.
+
+### 15 — Confirm success
+- Prefers `[data-confirmation]`; falls back to thank-you / eingegangen text.
+- Challenge markers on the result page still return `challenge`.
+- **Evidence:** `confirmSuccess`, mock `success.html` → `company-mock-1`.
+
+### 16 — Record the result
+- Worker returns `outcome: success` + `confirmation_reference` + `form_plan` (incl. `fill` audit).
+- Laravel `markSubmitted`: app → Submitted; attempt kind success; stores confirmation + form_plan.
+- Fail paths unchanged: `missing_info`, challenge, retryable.
+- **Evidence:** `RunModeBSubmitAfterDocsReady`, `ModeBFormPlanPersistTest::test_success_persists_form_plan_and_confirmation`, `npm run test:company-site-mock`.
+
+### 17 — Next-page flows
+- After filling the visible step: confirmation → else Next/Weiter → else final Absenden/Submit.
+- On Next: reload/settle, re-inspect, rematch, fill again (max 5 steps).
+- One-page applies unchanged; 2-step mock proves the loop.
+- Stop if navigation missing (`step_nav_not_found`) or cap hit (`max_steps_exceeded`).
+- `form_plan.steps` audits each page (feeds Plan 18; does not replace it).
+- **Evidence:** `classifyStepAction` / `hitNext`, company-site step loop, `npm run test:form-fill` + `test:company-site-mock` (one-page + two-step).
+
+### 18 — Keep context
+- Depends on Plan 17 step loop; feeds clearer `form_plan` into later Phase 4 stops.
+- Carry mapped/consent answers across steps (stable key: name → id → source).
+- Each page: rematch from candidate pack, then merge prior answers before fill/ready.
+- Prefer prior value on overlap; never invent for new required unknowns (Plan 9).
+- `form_plan.answers` = current step; `form_plan.answers_all` = cumulative for Staff.
+- **Evidence:** `mergePriorAnswers`, company-site context upsert, step2 overlapping email fixture, `npm run test:form-match` + `test:company-site-mock`.
+
+### 19 — Login walls
+- Detect company pages that require login/account (password + Anmelden/Login/Registrieren cues).
+- Stop with `challenge` / `login_wall`; do not invent credentials (signup is Plan 20).
+- Re-check every step so walls after Next are caught; keep captcha/`data-challenge` behavior.
+- Laravel already records challenge + BlockEvent — no API contract change.
+- **Evidence:** `detectChallenge` login heuristics, company-site per-step check, `login-wall.html`, `npm run test:form-inspect` + `test:company-site-mock`.
+
+### 20 — Soft account create
+- On login wall: if page is simple signup (Registrieren / Create account), try once with GMX `apply_email`.
+- Session-only generated password; never persist or return the secret (Plan 28 later).
+- Login-only Anmelden pages still hard-stop as `login_wall`.
+- Failure / verify-email / captcha → `challenge` (`soft_signup_failed` or existing kinds).
+- **Evidence:** `trySoftAccountCreate`, company-site soft-signup branch, soft-signup mock, `npm run test:company-site-mock`.
 
 ---
 

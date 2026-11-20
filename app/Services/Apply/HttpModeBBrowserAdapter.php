@@ -36,7 +36,7 @@ class HttpModeBBrowserAdapter implements ModeBBrowserPort
             return ModeBBrowserResult::retryable('worker_http_'.$response->status());
         }
 
-        /** @var array{outcome?: mixed, confirmation_reference?: mixed, detail?: mixed} $payload */
+        /** @var array{outcome?: mixed, confirmation_reference?: mixed, detail?: mixed, form_plan?: mixed} $payload */
         $payload = $response->json() ?? [];
 
         $outcomeRaw = is_string($payload['outcome'] ?? null) ? $payload['outcome'] : '';
@@ -51,12 +51,15 @@ class HttpModeBBrowserAdapter implements ModeBBrowserPort
         $detail = isset($payload['detail']) && is_string($payload['detail'])
             ? $payload['detail']
             : null;
+        $formPlan = isset($payload['form_plan']) && is_array($payload['form_plan'])
+            ? $payload['form_plan']
+            : null;
 
         return match ($outcome) {
             ModeBBrowserOutcome::Success => ModeBBrowserResult::success(
                 $confirmation ?? ('worker-'.$applicationId),
             ),
-            ModeBBrowserOutcome::IdentityMismatch => ModeBBrowserResult::identityMismatch($detail),
+            ModeBBrowserOutcome::IdentityMismatch => ModeBBrowserResult::identityMismatch($detail, $formPlan),
             ModeBBrowserOutcome::Challenge => ModeBBrowserResult::challenge($detail),
             ModeBBrowserOutcome::Retryable => ModeBBrowserResult::retryable($detail),
         };

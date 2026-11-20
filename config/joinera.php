@@ -97,6 +97,8 @@ return [
         'worker_url' => rtrim((string) env('JOINERA_MODE_B_WORKER_URL', 'http://127.0.0.1:3911'), '/'),
         'worker_secret' => (string) env('JOINERA_MODE_B_WORKER_SECRET', ''),
         'timeout' => max(5, (int) env('JOINERA_MODE_B_TIMEOUT', 120)),
+        // Legacy board Easy-Apply claim/path (Azubiyo/BA love-path probes). Default off — company site only.
+        'allow_board_apply' => (bool) env('JOINERA_MODE_B_ALLOW_BOARD_APPLY', false),
     ],
     // P0-13 preparing_docs: cover (+ CV when category differs) via LlmClient + PdfRenderer.
     'docs' => [

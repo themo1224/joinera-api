@@ -4,6 +4,7 @@ namespace App\Services\Azubiyo;
 
 use App\Contracts\AzubiyoHttpClient;
 use App\Contracts\SiteIntakeAdapter;
+use App\Support\ApplyUrlPreference;
 use DOMDocument;
 use DOMElement;
 use DOMNode;
@@ -440,6 +441,8 @@ class AzubiyoIntakeAdapter implements SiteIntakeAdapter
             return null;
         }
 
+        $candidates = [];
+
         foreach ($anchors as $anchor) {
             if (! $anchor instanceof DOMElement) {
                 continue;
@@ -457,10 +460,10 @@ class AzubiyoIntakeAdapter implements SiteIntakeAdapter
                 continue;
             }
 
-            return $applyUrl;
+            $candidates[] = $applyUrl;
         }
 
-        return null;
+        return ApplyUrlPreference::preferApplyUrl('azubiyo', ...$candidates);
     }
 
     /**

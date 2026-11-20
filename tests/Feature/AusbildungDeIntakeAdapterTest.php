@@ -166,6 +166,8 @@ class AusbildungDeIntakeAdapterTest extends TestCase
         $this->assertSame($listItem['url'], $detail['url']);
         $this->assertStringStartsWith('https://', $detail['apply_url'] ?? '');
         $this->assertNotSame($detail['url'], $detail['apply_url']);
+        $this->assertStringContainsString('sonovaretail-karriere.example.test', (string) $detail['apply_url']);
+        $this->assertStringNotContainsString('ausbildung.de', (string) $detail['apply_url']);
         $this->assertNotSame('', $detail['description'] ?? '');
         $this->assertNull($detail['language_requirement']);
         $this->assertSame('Mittlere Reife', $detail['education_requirement']);

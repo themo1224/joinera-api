@@ -6,6 +6,8 @@ use App\Enums\DocArtifactKind;
 use App\Models\Application;
 use App\Models\DocArtifact;
 use App\Models\SiteIdentity;
+use App\Support\ApplyUrlPreference;
+use App\Support\ModeBCandidatePack;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -18,7 +20,7 @@ class InternalModeBContextController extends Controller
 {
     public function show(Request $request, Application $application): JsonResponse
     {
-        $application->loadMissing(['listing', 'docArtifacts']);
+        $application->loadMissing(['listing', 'docArtifacts', 'user.profile', 'user.mailboxIdentity']);
 
         $identity = SiteIdentity::query()
             ->where('user_id', $application->user_id)
@@ -33,14 +35,24 @@ class InternalModeBContextController extends Controller
         $cv = $this->artifactMeta($application, DocArtifactKind::Cv, $prefix);
         $cover = $this->artifactMeta($application, DocArtifactKind::Cover, $prefix);
 
+        $candidate = $application->user !== null
+            ? ModeBCandidatePack::fromUser($application->user)
+            : ModeBCandidatePack::empty();
+
+        $applyUrl = $application->listing?->apply_url ?? $application->listing?->url;
+        $source = (string) ($application->site ?: $application->listing?->source ?: '');
+        $applyTarget = ApplyUrlPreference::applyTarget($source, $applyUrl);
+
         return response()->json([
             'user_id' => (int) $application->user_id,
             'site_id' => (string) $application->site,
             'application_id' => (int) $application->id,
             'listing_url' => $application->listing?->url,
-            'apply_url' => $application->listing?->apply_url ?? $application->listing?->url,
+            'apply_url' => $applyUrl,
+            'apply_target' => $applyTarget,
             'site_login' => $identity?->site_login,
             'site_secret' => $identity?->secret,
+            'candidate' => $candidate,
             'artifacts' => [
                 'cv' => $cv,
                 'cover' => $cover,

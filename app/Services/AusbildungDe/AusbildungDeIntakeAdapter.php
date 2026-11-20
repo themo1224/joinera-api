@@ -4,6 +4,7 @@ namespace App\Services\AusbildungDe;
 
 use App\Contracts\AusbildungDeHttpClient;
 use App\Contracts\SiteIntakeAdapter;
+use App\Support\ApplyUrlPreference;
 use DOMDocument;
 use DOMElement;
 use DOMNode;
@@ -374,24 +375,51 @@ class AusbildungDeIntakeAdapter implements SiteIntakeAdapter
 
     private function extractApplyUrl(DOMXPath $xpath, DOMDocument $dom, string $listingUrl): ?string
     {
-        $href = $this->firstAttribute(
+        $candidates = [];
+
+        $buttonHref = $this->firstAttribute(
             $xpath,
             $dom,
             '//a[@data-testid="application-button"]',
             'href',
         );
 
-        if ($href === null) {
-            return null;
+        if ($buttonHref !== null) {
+            $buttonUrl = $this->absolutizeUrl($buttonHref, $this->baseUrl());
+
+            if ($buttonUrl !== $listingUrl) {
+                $candidates[] = $buttonUrl;
+            }
         }
 
-        $applyUrl = $this->absolutizeUrl($href, $this->baseUrl());
+        $anchors = $xpath->query(
+            '//a[contains(translate(@href, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "bewerben")'
+            .' or contains(translate(@href, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "/apply")]',
+        );
 
-        if ($applyUrl === $listingUrl) {
-            return null;
+        if ($anchors !== false) {
+            foreach ($anchors as $anchor) {
+                if (! $anchor instanceof DOMElement) {
+                    continue;
+                }
+
+                $href = trim($anchor->getAttribute('href'));
+
+                if ($href === '') {
+                    continue;
+                }
+
+                $applyUrl = $this->absolutizeUrl($href, $this->baseUrl());
+
+                if ($applyUrl === $listingUrl) {
+                    continue;
+                }
+
+                $candidates[] = $applyUrl;
+            }
         }
 
-        return $applyUrl;
+        return ApplyUrlPreference::preferApplyUrl('ausbildung.de', ...$candidates);
     }
 
     /**

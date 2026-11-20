@@ -5,11 +5,13 @@ namespace Tests\Feature;
 use App\Enums\ApplicationStatus;
 use App\Enums\ApplyAttemptKind;
 use App\Enums\ApprovalStatus;
+use App\Enums\MailboxState;
 use App\Enums\SiteIdentityState;
 use App\Jobs\SubmitApplicationJob;
 use App\Models\Application;
 use App\Models\ApplyAttempt;
 use App\Models\Listing;
+use App\Models\MailboxIdentity;
 use App\Models\Profile;
 use App\Models\SiteIdentity;
 use App\Models\User;
@@ -20,8 +22,9 @@ use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
 /**
- * Plan 1 — Mode B exclusive claim of an applying Application into an open ApplyAttempt.
+ * Mode B exclusive claim — company-site path (plans 3–4).
  *
+ * @see docs/COMPANY_SITE_APPLY_PLANS.md plans 3–4
  * @see docs/api/IMPLEMENTATION_PHASES.md P0-15 (adapted: claim from applying)
  */
 class SubmitApplicationClaimTest extends TestCase
@@ -55,6 +58,17 @@ class SubmitApplicationClaimTest extends TestCase
         $this->assertNotNull($attempt);
         $this->assertNull($attempt->kind);
         $this->assertNull($attempt->confirmation_reference);
+        $this->assertSame(1, ApplyAttempt::query()->where('application_id', $application->id)->count());
+    }
+
+    public function test_claim_succeeds_without_board_site_identity(): void
+    {
+        $application = $this->makeClaimableApplication(withSiteIdentity: false);
+
+        $attempt = app(ClaimApplyingApplication::class)->handle($application->id);
+
+        $this->assertNotNull($attempt);
+        $this->assertNull($attempt->kind);
         $this->assertSame(1, ApplyAttempt::query()->where('application_id', $application->id)->count());
     }
 
@@ -96,30 +110,44 @@ class SubmitApplicationClaimTest extends TestCase
         $this->assertSame(ApplicationStatus::Applying, $application->fresh()->status);
     }
 
-    public function test_paused_site_identity_writes_hard_fail_attempt(): void
+    public function test_mailbox_not_ready_writes_hard_fail_attempt(): void
     {
-        $application = $this->makeClaimableApplication(sitePaused: true);
+        $application = $this->makeClaimableApplication(mailboxReady: false);
 
         $this->runJob($application->id);
 
         $attempt = ApplyAttempt::query()->where('application_id', $application->id)->first();
         $this->assertNotNull($attempt);
         $this->assertSame(ApplyAttemptKind::HardFail, $attempt->kind);
-        $this->assertSame('no_healthy_site', $attempt->stop_reason);
+        $this->assertSame('mailbox_not_ready', $attempt->stop_reason);
         $this->assertSame(ApplicationStatus::Applying, $application->fresh()->status);
     }
 
-    public function test_missing_site_identity_writes_hard_fail_attempt(): void
+    public function test_board_only_apply_url_writes_hard_fail_attempt(): void
     {
-        $application = $this->makeClaimableApplication(withSiteIdentity: false);
+        $application = $this->makeClaimableApplication(
+            applyUrl: 'https://www.azubiyo.de/stellen/1/bewerben',
+            listingUrl: 'https://www.azubiyo.de/stellen/1',
+            source: 'azubiyo',
+        );
 
         $this->runJob($application->id);
 
         $attempt = ApplyAttempt::query()->where('application_id', $application->id)->first();
         $this->assertNotNull($attempt);
         $this->assertSame(ApplyAttemptKind::HardFail, $attempt->kind);
-        $this->assertSame('no_healthy_site', $attempt->stop_reason);
+        $this->assertSame('missing_company_apply_url', $attempt->stop_reason);
         $this->assertSame(ApplicationStatus::Applying, $application->fresh()->status);
+    }
+
+    public function test_paused_board_site_identity_does_not_block_company_claim(): void
+    {
+        $application = $this->makeClaimableApplication(sitePaused: true);
+
+        $attempt = app(ClaimApplyingApplication::class)->handle($application->id);
+
+        $this->assertNotNull($attempt);
+        $this->assertNull($attempt->kind);
     }
 
     public function test_job_can_be_dispatched_onto_apply_queue(): void
@@ -155,6 +183,10 @@ class SubmitApplicationClaimTest extends TestCase
         bool $approved = true,
         bool $withSiteIdentity = true,
         bool $sitePaused = false,
+        bool $mailboxReady = true,
+        string $source = 'azubiyo',
+        string $listingUrl = 'https://www.azubiyo.de/stellen/1',
+        string $applyUrl = 'https://karriere.firma.example.test/apply',
     ): Application {
         $approver = User::factory()->staff()->create();
         $applicant = $owner ?? User::factory()->create();
@@ -172,7 +204,18 @@ class SubmitApplicationClaimTest extends TestCase
         }
         $profile->save();
 
-        $listing = Listing::factory()->forSource('ausbildung.de')->create();
+        if ($mailboxReady) {
+            MailboxIdentity::factory()->ready()->for($applicant)->create();
+        } else {
+            MailboxIdentity::factory()->for($applicant)->create([
+                'state' => MailboxState::Pending,
+            ]);
+        }
+
+        $listing = Listing::factory()->forSource($source)->create([
+            'url' => $listingUrl,
+            'apply_url' => $applyUrl,
+        ]);
 
         if ($withSiteIdentity) {
             SiteIdentity::factory()

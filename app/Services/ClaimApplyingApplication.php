@@ -5,18 +5,25 @@ namespace App\Services;
 use App\Enums\ApplicationStatus;
 use App\Enums\ApplyAttemptKind;
 use App\Enums\ApprovalStatus;
+use App\Enums\MailboxState;
 use App\Enums\SiteIdentityState;
 use App\Models\Application;
 use App\Models\ApplyAttempt;
+use App\Models\MailboxIdentity;
 use App\Models\SiteIdentity;
+use App\Support\ApplyUrlPreference;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Exclusive Mode B claim for an Application already in applying.
  *
  * Creates an open ApplyAttempt (kind null) when claimable.
- * When status is applying but profile/site gates fail, writes a hard_fail
+ * When status is applying but gates fail, writes a hard_fail
  * ApplyAttempt with a stop_reason so Staff never see a silent hang.
+ *
+ * Company-site apply (PRD 1.8 / plan 3): requires approved profile + ready GMX.
+ * Board SiteIdentity is NOT a claim gate for company URLs.
+ * Board-only URLs hard-fail unless joinera.mode_b.allow_board_apply (legacy probes).
  */
 class ClaimApplyingApplication
 {
@@ -49,17 +56,38 @@ class ClaimApplyingApplication
                 return $this->finalizeHardFail($application, 'profile_not_approved');
             }
 
-            if (! $this->siteReady($application)) {
-                return $this->finalizeHardFail($application, 'no_healthy_site');
+            if (! $this->mailboxReady($application)) {
+                return $this->finalizeHardFail($application, 'mailbox_not_ready');
             }
 
-            $attempt = new ApplyAttempt;
-            $attempt->application_id = $application->id;
-            $attempt->kind = null;
-            $attempt->confirmation_reference = null;
-            $attempt->save();
+            $target = $this->applyTarget($application);
 
-            return $attempt;
+            if ($target === 'company') {
+                $attempt = new ApplyAttempt;
+                $attempt->application_id = $application->id;
+                $attempt->kind = null;
+                $attempt->confirmation_reference = null;
+                $attempt->save();
+
+                return $attempt;
+            }
+
+            // Legacy board Easy-Apply (opt-in only).
+            if ($target === 'board' && (bool) config('joinera.mode_b.allow_board_apply', false)) {
+                if (! $this->siteReady($application)) {
+                    return $this->finalizeHardFail($application, 'no_healthy_site');
+                }
+
+                $attempt = new ApplyAttempt;
+                $attempt->application_id = $application->id;
+                $attempt->kind = null;
+                $attempt->confirmation_reference = null;
+                $attempt->save();
+
+                return $attempt;
+            }
+
+            return $this->finalizeHardFail($application, 'missing_company_apply_url');
         });
     }
 
@@ -71,6 +99,14 @@ class ClaimApplyingApplication
         return $profile !== null && $profile->approval === ApprovalStatus::Approved;
     }
 
+    private function mailboxReady(Application $application): bool
+    {
+        return MailboxIdentity::query()
+            ->where('user_id', $application->user_id)
+            ->where('state', MailboxState::Ready)
+            ->exists();
+    }
+
     private function siteReady(Application $application): bool
     {
         return SiteIdentity::query()
@@ -79,6 +115,23 @@ class ClaimApplyingApplication
             ->where('state', SiteIdentityState::Healthy)
             ->where('paused', false)
             ->exists();
+    }
+
+    /**
+     * @return 'company'|'board'|'missing'
+     */
+    private function applyTarget(Application $application): string
+    {
+        $application->loadMissing('listing');
+        $listing = $application->listing;
+        if ($listing === null) {
+            return 'missing';
+        }
+
+        $url = $listing->apply_url ?: $listing->url;
+        $source = (string) ($application->site ?: $listing->source);
+
+        return ApplyUrlPreference::applyTarget($source, $url);
     }
 
     private function finalizeHardFail(Application $application, string $stopReason): ApplyAttempt

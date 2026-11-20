@@ -193,6 +193,31 @@ class AzubiyoIntakeAdapterTest extends TestCase
         $this->assertSame('bga9a4a4', $detail['external_id']);
     }
 
+    public function test_parse_detail_prefers_off_board_company_apply_url(): void
+    {
+        $listingUrl = 'https://www.azubiyo.de/stellenanzeigen/ausbildung-zum-kaufmann-fuer-bueromanagement-m-w-d_expert_66195a74/';
+        $fake = (new FakeAzubiyoHttpClient)->withPathOverrides([
+            '66195a74' => 'detail_with_company_apply.html',
+        ]);
+        $adapter = new AzubiyoIntakeAdapter($fake);
+
+        $detail = $adapter->parseDetail([
+            'external_id' => '66195a74',
+            'url' => $listingUrl,
+            'title' => 'Ausbildung zum Kaufmann für Büromanagement (m/w/d)',
+            'company' => 'NDB ELEKTROTECHNIK GmbH & Co. KG',
+            'city' => '21684 Stade',
+            'kind' => 'ausbildung',
+        ]);
+
+        $this->assertSame($listingUrl, $detail['url']);
+        $this->assertSame(
+            'https://karriere.ndb-elektro.example.test/jobs/bueromanagement/bewerben',
+            $detail['apply_url'],
+        );
+        $this->assertStringNotContainsString('azubiyo.de', (string) $detail['apply_url']);
+    }
+
     public function test_parse_detail_then_upsert_creates_once_and_dedupes_by_external_id(): void
     {
         Event::fake();

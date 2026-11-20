@@ -47,6 +47,7 @@ class AzubiyoLovePathPipelineTest extends TestCase
             'joinera.docs.regenerate_max_per_hour' => 5,
             'joinera.queues.apply' => 'apply',
             'joinera.queues.docs' => 'docs',
+            'joinera.mode_b.allow_board_apply' => true,
             'joinera.ai.driver' => 'fake',
             'joinera.mode_b.driver' => 'http',
             'joinera.mode_b.worker_url' => 'http://127.0.0.1:3911',

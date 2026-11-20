@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'kind',
     'confirmation_reference',
     'stop_reason',
+    'form_plan',
 ])]
 class ApplyAttempt extends Model
 {
@@ -35,6 +36,7 @@ class ApplyAttempt extends Model
     {
         return [
             'kind' => ApplyAttemptKind::class,
+            'form_plan' => 'array',
         ];
     }
 }

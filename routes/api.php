@@ -96,6 +96,8 @@ Route::prefix('v1')->group(function () {
             ->middleware('staff');
         Route::post('applications/{application}/docs/generate', [StaffApplicationDocsController::class, 'generate'])
             ->middleware('staff');
+        Route::post('applications/{application}/retry-apply', [StaffApplicationController::class, 'retryApply'])
+            ->middleware('staff');
 
         Route::get('ops/reports', [StaffOpsReportController::class, 'show'])->middleware('staff');
         Route::get('ops/blocks', [StaffBlockEventController::class, 'index'])->middleware('staff');

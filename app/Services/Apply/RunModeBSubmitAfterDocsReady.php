@@ -41,7 +41,7 @@ class RunModeBSubmitAfterDocsReady implements ModeBSubmitAfterDocsReady
 
         match ($result->outcome) {
             ModeBBrowserOutcome::Success => $this->markSubmitted($application, $attempt, $result),
-            ModeBBrowserOutcome::IdentityMismatch => $this->markIdentityMismatch($attempt),
+            ModeBBrowserOutcome::IdentityMismatch => $this->markIdentityMismatch($attempt, $result),
             ModeBBrowserOutcome::Challenge => $this->markChallenge($application, $attempt, $result),
             ModeBBrowserOutcome::Retryable => $this->markRetryable($attempt, $result),
         };
@@ -79,11 +79,19 @@ class RunModeBSubmitAfterDocsReady implements ModeBSubmitAfterDocsReady
         });
     }
 
-    private function markIdentityMismatch(ApplyAttempt $attempt): void
+    private function markIdentityMismatch(ApplyAttempt $attempt, ModeBBrowserResult $result): void
     {
         $attempt->kind = ApplyAttemptKind::HardFail;
-        $attempt->stop_reason = ModeBBrowserOutcome::IdentityMismatch->value;
+        // Preserve worker detail (e.g. external_apply:https://...) so Staff sees the company link.
+        $detail = trim((string) ($result->detail ?? ''));
+        $attempt->stop_reason = $detail !== ''
+            ? mb_substr($detail, 0, 255)
+            : ModeBBrowserOutcome::IdentityMismatch->value;
         $attempt->confirmation_reference = null;
+        // Plan 10 — persist form plan for replay/debug (even when missing_info).
+        if (is_array($result->formPlan)) {
+            $attempt->form_plan = $result->formPlan;
+        }
         $attempt->save();
     }
 

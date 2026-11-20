@@ -16,6 +16,7 @@ use App\Models\Application;
 use App\Models\ApplyAttempt;
 use App\Models\DocArtifact;
 use App\Models\Listing;
+use App\Models\MailboxIdentity;
 use App\Models\Profile;
 use App\Models\SiteIdentity;
 use App\Models\User;
@@ -103,7 +104,7 @@ class SubmitApplicationModeBFixtureTest extends TestCase
         $attempt = ApplyAttempt::query()->where('application_id', $application->id)->first();
         $this->assertNotNull($attempt);
         $this->assertSame(ApplyAttemptKind::HardFail, $attempt->kind);
-        $this->assertSame(ModeBBrowserOutcome::IdentityMismatch->value, $attempt->stop_reason);
+        $this->assertSame('forced', $attempt->stop_reason);
         $this->assertNull($attempt->confirmation_reference);
     }
 
@@ -217,7 +218,12 @@ class SubmitApplicationModeBFixtureTest extends TestCase
         $profile->approved_at = now();
         $profile->save();
 
-        $listing = Listing::factory()->forSource('ausbildung.de')->create();
+        MailboxIdentity::factory()->ready()->for($applicant)->create();
+
+        $listing = Listing::factory()->forSource('ausbildung.de')->create([
+            'url' => 'https://www.ausbildung.de/stellen/mode-b-fixture',
+            'apply_url' => 'https://karriere.firma.example.test/mode-b-fixture/apply',
+        ]);
 
         SiteIdentity::factory()
             ->for($applicant)

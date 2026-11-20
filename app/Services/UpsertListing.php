@@ -7,6 +7,7 @@ use App\Events\ListingCreated;
 use App\Exceptions\IntakeIdentityContextException;
 use App\Exceptions\ListingDroppedException;
 use App\Models\Listing;
+use App\Support\ApplyUrlPreference;
 use Illuminate\Support\Carbon;
 
 class UpsertListing
@@ -57,6 +58,11 @@ class UpsertListing
 
         if ($existing !== null) {
             $existing->last_seen_at = $now;
+
+            if (ApplyUrlPreference::shouldUpgradeApplyUrl($source, $existing->apply_url, $applyUrl)) {
+                $existing->apply_url = $applyUrl;
+            }
+
             $existing->save();
 
             return ['listing' => $existing, 'created' => false];

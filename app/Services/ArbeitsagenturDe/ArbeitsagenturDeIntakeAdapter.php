@@ -4,6 +4,7 @@ namespace App\Services\ArbeitsagenturDe;
 
 use App\Contracts\ArbeitsagenturDeHttpClient;
 use App\Contracts\SiteIntakeAdapter;
+use App\Support\ApplyUrlPreference;
 use RuntimeException;
 
 /**
@@ -327,9 +328,12 @@ class ArbeitsagenturDeIntakeAdapter implements SiteIntakeAdapter
         $description = $this->nonEmptyString($json['stellenangebotsBeschreibung'] ?? null)
             ?? $this->nonEmptyString($json['stellenbeschreibung'] ?? null);
 
-        $applyUrl = $this->nonEmptyString($json['externeUrl'] ?? null)
-            ?? $this->nonEmptyString($json['allianzpartnerUrl'] ?? null)
-            ?? $url;
+        $applyUrl = ApplyUrlPreference::preferApplyUrl(
+            'arbeitsagentur.de',
+            $this->nonEmptyString($json['externeUrl'] ?? null),
+            $this->nonEmptyString($json['allianzpartnerUrl'] ?? null),
+            $url,
+        );
 
         $postedAt = $this->nonEmptyString($json['datumErsteVeroeffentlichung'] ?? null)
             ?? $this->nonEmptyString($json['aktuelleVeroeffentlichungsdatum'] ?? null)
@@ -379,9 +383,17 @@ class ArbeitsagenturDeIntakeAdapter implements SiteIntakeAdapter
         $description = $this->nonEmptyString($angebot['inhalt'] ?? null);
         $education = $this->extractAusbildungEducation($angebot);
         $homepage = $this->nonEmptyString($anbieter['homepage'] ?? null);
-        $applyUrl = $homepage !== null
-            ? (str_starts_with($homepage, 'http') ? $homepage : 'https://'.$homepage)
-            : $url;
+        $homepageUrl = null;
+
+        if ($homepage !== null) {
+            $homepageUrl = str_starts_with($homepage, 'http') ? $homepage : 'https://'.$homepage;
+        }
+
+        $applyUrl = ApplyUrlPreference::preferApplyUrl(
+            'arbeitsagentur.de',
+            $homepageUrl,
+            $url,
+        );
 
         return [
             'external_id' => $externalId,

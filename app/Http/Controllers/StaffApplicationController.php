@@ -6,12 +6,14 @@ use App\Enums\Role;
 use App\Http\Requests\ListApplicationsRequest;
 use App\Models\Application;
 use App\Services\BuildApplicationOpsItem;
+use App\Services\RetryApplyApplication;
 use Illuminate\Http\JsonResponse;
 
 class StaffApplicationController extends Controller
 {
     public function __construct(
         private readonly BuildApplicationOpsItem $buildApplicationOpsItem,
+        private readonly RetryApplyApplication $retryApplyApplication,
     ) {}
 
     public function index(ListApplicationsRequest $request): JsonResponse
@@ -91,5 +93,39 @@ class StaffApplicationController extends Controller
         }
 
         return response()->json($this->buildApplicationOpsItem->handle($application));
+    }
+
+    public function retryApply(Application $application): JsonResponse
+    {
+        $application->loadMissing(['user']);
+
+        if ($application->user === null || $application->user->role !== Role::User) {
+            return response()->json([
+                'code' => 'not_found',
+                'message' => 'Not found.',
+            ], 404);
+        }
+
+        $result = $this->retryApplyApplication->handle($application);
+        if (! $result['ok']) {
+            $messages = [
+                'application_already_submitted' => 'Application is already submitted.',
+                'retry_apply_wrong_status' => 'Apply can only be retried while status is applying.',
+                'apply_in_progress' => 'An apply attempt is already in progress.',
+                'docs_not_ready' => 'Documents are not ready for Mode B apply.',
+                'profile_not_approved' => 'Applicant profile is not approved.',
+                'site_not_ready' => 'No healthy site identity for this application.',
+            ];
+
+            return response()->json([
+                'code' => $result['code'],
+                'message' => $messages[$result['code']] ?? 'Retry apply is not allowed.',
+            ], 409);
+        }
+
+        return response()->json([
+            'success' => true,
+            'applicationId' => $application->id,
+        ], 202);
     }
 }

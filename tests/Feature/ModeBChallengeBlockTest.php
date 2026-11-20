@@ -15,6 +15,7 @@ use App\Models\ApplyAttempt;
 use App\Models\BlockEvent;
 use App\Models\DocArtifact;
 use App\Models\Listing;
+use App\Models\MailboxIdentity;
 use App\Models\Profile;
 use App\Models\SiteIdentity;
 use App\Models\User;
@@ -109,7 +110,12 @@ class ModeBChallengeBlockTest extends TestCase
         $profile->approved_at = now();
         $profile->save();
 
-        $listing = Listing::factory()->forSource('azubiyo')->create();
+        MailboxIdentity::factory()->ready()->for($applicant)->create();
+
+        $listing = Listing::factory()->forSource('azubiyo')->create([
+            'url' => 'https://www.azubiyo.de/stellen/challenge',
+            'apply_url' => 'https://karriere.firma.example.test/challenge/apply',
+        ]);
 
         SiteIdentity::factory()
             ->for($applicant)

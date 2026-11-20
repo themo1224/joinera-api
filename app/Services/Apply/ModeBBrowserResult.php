@@ -6,10 +6,14 @@ use App\Enums\ModeBBrowserOutcome;
 
 final readonly class ModeBBrowserResult
 {
+    /**
+     * @param  array<string, mixed>|null  $formPlan
+     */
     public function __construct(
         public ModeBBrowserOutcome $outcome,
         public ?string $confirmationReference = null,
         public ?string $detail = null,
+        public ?array $formPlan = null,
     ) {}
 
     public static function success(string $confirmationReference): self
@@ -17,9 +21,12 @@ final readonly class ModeBBrowserResult
         return new self(ModeBBrowserOutcome::Success, $confirmationReference);
     }
 
-    public static function identityMismatch(?string $detail = null): self
+    /**
+     * @param  array<string, mixed>|null  $formPlan
+     */
+    public static function identityMismatch(?string $detail = null, ?array $formPlan = null): self
     {
-        return new self(ModeBBrowserOutcome::IdentityMismatch, detail: $detail);
+        return new self(ModeBBrowserOutcome::IdentityMismatch, detail: $detail, formPlan: $formPlan);
     }
 
     public static function challenge(?string $detail = null): self

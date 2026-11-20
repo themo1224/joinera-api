@@ -74,4 +74,26 @@ class HttpModeBBrowserAdapterTest extends TestCase
 
         $this->assertSame(ModeBBrowserOutcome::Retryable, $result->outcome);
     }
+
+    public function test_maps_form_plan_on_identity_mismatch(): void
+    {
+        Http::fake([
+            'http://mode-b-worker.test/submit' => Http::response([
+                'outcome' => 'identity_mismatch',
+                'detail' => 'form_plan_ready',
+                'form_plan' => [
+                    'version' => 1,
+                    'ready' => true,
+                    'answers' => [['field_id' => 'email', 'value' => 'a@gmx.de']],
+                ],
+            ], 200),
+        ]);
+
+        $result = app(HttpModeBBrowserAdapter::class)->submit(1, 'azubiyo', 1);
+
+        $this->assertSame(ModeBBrowserOutcome::IdentityMismatch, $result->outcome);
+        $this->assertSame('form_plan_ready', $result->detail);
+        $this->assertTrue($result->formPlan['ready'] ?? false);
+        $this->assertSame('a@gmx.de', $result->formPlan['answers'][0]['value'] ?? null);
+    }
 }

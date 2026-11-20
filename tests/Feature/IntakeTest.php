@@ -86,6 +86,49 @@ class IntakeTest extends TestCase
         $this->assertTrue($listing->posted_at->equalTo('2026-10-15 08:30:00'));
     }
 
+    public function test_upsert_listing_upgrades_board_apply_url_to_company_on_resee(): void
+    {
+        $upsert = $this->app->make(UpsertListing::class);
+
+        $first = $upsert->handle('azubiyo', [
+            'external_id' => 'upgrade-1',
+            'kind' => 'ausbildung',
+            'title' => 'Kaufmann Büromanagement',
+            'company' => 'Firma GmbH',
+            'city' => 'Hamburg',
+            'url' => 'https://www.azubiyo.de/stellenanzeigen/upgrade-1/',
+            'apply_url' => 'https://www.azubiyo.de/stellenanzeigen/upgrade-1/bewerben/',
+            'country' => 'DE',
+        ]);
+
+        $this->assertNotNull($first);
+        $this->assertTrue($first['created']);
+        $this->assertSame(
+            'https://www.azubiyo.de/stellenanzeigen/upgrade-1/bewerben/',
+            $first['listing']->apply_url,
+        );
+
+        $second = $upsert->handle('azubiyo', [
+            'external_id' => 'upgrade-1',
+            'kind' => 'ausbildung',
+            'title' => 'Kaufmann Büromanagement',
+            'company' => 'Firma GmbH',
+            'city' => 'Hamburg',
+            'url' => 'https://www.azubiyo.de/stellenanzeigen/upgrade-1/',
+            'apply_url' => 'https://karriere.firma.example.test/jobs/upgrade-1/bewerben',
+            'country' => 'DE',
+        ]);
+
+        $this->assertNotNull($second);
+        $this->assertFalse($second['created']);
+        $listing = $second['listing']->fresh();
+        $this->assertSame(
+            'https://karriere.firma.example.test/jobs/upgrade-1/bewerben',
+            $listing->apply_url,
+        );
+        $this->assertSame('https://www.azubiyo.de/stellenanzeigen/upgrade-1/', $listing->url);
+    }
+
     public function test_same_external_id_on_second_run_updates_last_seen_at_only(): void
     {
         Event::fake([ListingCreated::class]);

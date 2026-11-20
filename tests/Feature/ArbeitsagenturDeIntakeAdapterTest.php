@@ -188,6 +188,34 @@ class ArbeitsagenturDeIntakeAdapterTest extends TestCase
         $this->assertArrayNotHasKey('site_identity_id', $detail);
     }
 
+    public function test_parse_detail_jobs_prefers_externe_url_over_board_allianzpartner(): void
+    {
+        $externalId = '10000-1184867112-S';
+        $fake = (new FakeArbeitsagenturDeHttpClient)->withPathOverrides([
+            rawurlencode(base64_encode($externalId)) => 'jobs_detail_with_externe_url.json',
+        ]);
+        $adapter = new ArbeitsagenturDeIntakeAdapter($fake);
+
+        $detail = $adapter->parseDetail([
+            'external_id' => $externalId,
+            'url' => 'https://www.arbeitsagentur.de/jobsuche/jobdetail/'.$externalId,
+            'title' => 'Elektroinstallateur/in',
+            'company' => 'Gröger & Oltermann',
+            'city' => 'Berlin',
+            'kind' => 'job',
+        ]);
+
+        $this->assertSame(
+            'https://www.arbeitsagentur.de/jobsuche/jobdetail/'.$externalId,
+            $detail['url'],
+        );
+        $this->assertSame(
+            'https://karriere.groeger-oltermann.example.test/stellen/elektro/apply',
+            $detail['apply_url'],
+        );
+        $this->assertStringNotContainsString('arbeitsagentur.de', (string) $detail['apply_url']);
+    }
+
     public function test_parse_detail_ausbildung_from_fixture_returns_upsert_payload(): void
     {
         config(['joinera.sites.adapters.arbeitsagentur_de.max_pages' => 1]);

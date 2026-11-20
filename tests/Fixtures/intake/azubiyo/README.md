@@ -48,7 +48,7 @@ Examples: `66195a74`, `bga9a4a4`, `eacaa2g6`, `9g2g5g8b`. Do **not** use JobPost
 | company / city fallback | `[data-azy-company]` / `[data-azy-city]` (strip trailing `, Deutschland`) then list item |
 | description fallback | `[data-azy-description]` |
 | education fallback | text matching `Schulabschluss:\s*(…)` |
-| apply_url | first `a` whose href contains `bewerben` (≠ listing URL) |
+| apply_url | prefer off-board `a[href*=bewerben]`; else first board bewerben (≠ listing URL). Company fixture: `detail_with_company_apply.html` |
 
 ## Re-capture locally (manual curl only)
 

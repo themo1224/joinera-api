@@ -57,9 +57,9 @@
 | 18 | Keep context | Answers from step 1 still make sense on step 2. **Done (2026-11-20):** `mergePriorAnswers` + `answers_all`; overlapping fields reuse prior values. |
 | 19 | Login walls | If the company forces an account, we detect it cleanly. **Done (2026-11-20):** `detectChallenge` login heuristics; per-step check; `login_wall` challenge. |
 | 20 | Soft account create | When signup is simple, we try it with the GMX apply email. **Done (2026-11-20):** one soft signup with GMX email + session password; login-only still hard-stops. |
-| 21 | Privacy / consent | Cookie banners and “I agree” boxes get handled. |
-| 22 | Required traps | Hidden required fields and errors are found and fixed. |
-| 23 | Weird layouts | Unusual pages still get a best-effort fill path. |
+| 21 | Privacy / consent | Cookie banners and “I agree” boxes get handled. **Done (2026-11-20):** `dismissCookieConsent` before inspect/fill; in-form consent via Plans 8/12 + soft-signup helper. |
+| 22 | Required traps | Hidden required fields and errors are found and fixed. **Done (2026-11-20):** `listHiddenRequired` + one post-submit trap retry; never invent answers. |
+| 23 | Weird layouts | Unusual pages still get a best-effort fill path. **Done (2026-11-21):** open shadow + formless/contenteditable locate; same-origin apply iframe pick; `layout_fallbacks` audit. |
 | 24 | End-of-flow proof | Final “thank you” / confirmation screens are recognized. |
 
 ---
@@ -91,7 +91,7 @@
 
 ---
 
-## Plan notes (3–20)
+## Plan notes (3–23)
 
 ### 3 — Stop board apply
 - **Claim:** approved profile + ready GMX + **company** `apply_url`. Board `SiteIdentity` is not required.
@@ -191,6 +191,29 @@
 - Login-only Anmelden pages still hard-stop as `login_wall`.
 - Failure / verify-email / captcha → `challenge` (`soft_signup_failed` or existing kinds).
 - **Evidence:** `trySoftAccountCreate`, company-site soft-signup branch, soft-signup mock, `npm run test:company-site-mock`.
+
+### 21 — Privacy / consent
+- Dismiss cookie/CMP overlays before inspect/fill (and again each step / after nav); prefer necessary cookies, else accept-all.
+- In-form Datenschutz/AGB still via Plan 8/12 `consent` answers; soft-signup reuses `checkFormConsentBoxes`.
+- Best-effort only — no `cookie_wall` challenge (Plan 25). Audit: `form_plan.cookie_consent`.
+- `listQuestions` skips CMP container inputs so banner widgets are not apply fields.
+- **Evidence:** `dismissCookieConsent`, `cookie-banner.html`, `npm run test:form-inspect` + `test:company-site-mock`.
+
+### 22 — Required traps
+- Empty required `type=hidden` inputs listed separately (not via `listQuestions`); map `source`/`job_id`/… from `application_id` only.
+- Pre-fill mapped hiddens; if still missing → `missing_info` (Plan 9).
+- After failed Submit/Next while still on form: `detectFormErrors` → one re-inspect/rematch/re-fill/resubmit.
+- Never invent values for revealed required fields — rematch from candidate pack only.
+- Audit: `form_plan.required_traps` (`detected`, `fixed`, `attempts`, `fields`).
+- **Evidence:** `required-traps.js`, `required-traps.html`, `npm run test:form-inspect` + `test:company-site-mock`.
+
+### 23 — Weird layouts
+- `listQuestions` walks open shadow roots (depth ≤ 2); sibling labels; formless `[role=form]` snippet.
+- `locateControl` fallbacks: role/placeholder/sibling; contenteditable via `pressSequentially`.
+- `pickApplyFrame` for same-origin apply iframes; `stillOnForm` widened for formless submit cues.
+- Audit: `form_plan.layout_fallbacks` (`shadow_used`, `iframe_src`, `locate_strategies`).
+- Non-goals: closed shadow, cross-origin embeds, full ATS widgets.
+- **Evidence:** `weird-layouts.js`, `weird-no-form.html`, `weird-shadow.html`, `npm run test:form-inspect` + `test:company-site-mock`.
 
 ---
 

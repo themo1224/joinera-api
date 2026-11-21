@@ -47,8 +47,9 @@ class StaffBlockEventListTest extends TestCase
             'site' => 'azubiyo',
             'application_id' => $openApp->id,
             'observed_kind' => BlockEvent::KIND_CAPTCHA,
+            'resolved_at' => null,
         ]);
-        BlockEvent::factory()->create([
+        BlockEvent::factory()->resolved()->create([
             'user_id' => $other->id,
             'site' => 'azubiyo',
             'application_id' => $closedApp->id,
@@ -74,7 +75,8 @@ class StaffBlockEventListTest extends TestCase
             ->assertJsonPath('alerts.0.siteIdentityId', $identity->id)
             ->assertJsonPath('alerts.0.kind', 'captcha')
             ->assertJsonPath('alerts.0.open', true)
-            ->assertJsonStructure(['alerts' => [['createdAt']]]);
+            ->assertJsonPath('alerts.0.needsHelp', true)
+            ->assertJsonStructure(['alerts' => [['createdAt', 'needsHelpMessage', 'companyApplyUrl']]]);
     }
 
     public function test_opens_false_returns_closed_alerts(): void
@@ -90,8 +92,9 @@ class StaffBlockEventListTest extends TestCase
             'user_id' => $candidate->id,
             'site' => 'azubiyo',
             'observed_kind' => BlockEvent::KIND_CAPTCHA,
+            'resolved_at' => null,
         ]);
-        $closed = BlockEvent::factory()->create([
+        $closed = BlockEvent::factory()->resolved()->create([
             'user_id' => $other->id,
             'site' => 'azubiyo',
             'observed_kind' => BlockEvent::KIND_LOGIN_WALL,
@@ -119,11 +122,13 @@ class StaffBlockEventListTest extends TestCase
             'user_id' => $alice->id,
             'site' => 'azubiyo',
             'observed_kind' => BlockEvent::KIND_CAPTCHA,
+            'resolved_at' => null,
         ]);
         BlockEvent::factory()->create([
             'user_id' => $bob->id,
             'site' => 'ausbildung',
             'observed_kind' => BlockEvent::KIND_TWO_FACTOR,
+            'resolved_at' => null,
         ]);
 
         $this->actingAs($staff, 'sanctum')
@@ -142,11 +147,37 @@ class StaffBlockEventListTest extends TestCase
         BlockEvent::factory()->create([
             'user_id' => $candidate->id,
             'site' => 'azubiyo',
+            'resolved_at' => null,
         ]);
 
         $this->actingAs($admin, 'sanctum')
             ->getJson('/api/v1/ops/blocks')
             ->assertOk()
             ->assertJsonPath('total', 1);
+    }
+
+    public function test_open_block_without_site_identity_is_listed(): void
+    {
+        $staff = User::factory()->staff()->create();
+        $candidate = User::factory()->create(['name' => 'Company Only']);
+        $app = Application::factory()->for($candidate)->applying()->create(['site' => 'azubiyo']);
+
+        $event = BlockEvent::factory()->create([
+            'user_id' => $candidate->id,
+            'site' => 'azubiyo',
+            'application_id' => $app->id,
+            'observed_kind' => BlockEvent::KIND_COOKIE_WALL,
+            'resolved_at' => null,
+        ]);
+
+        $this->actingAs($staff, 'sanctum')
+            ->getJson('/api/v1/ops/blocks')
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('openCount', 1)
+            ->assertJsonPath('alerts.0.id', $event->id)
+            ->assertJsonPath('alerts.0.kind', 'cookie_wall')
+            ->assertJsonPath('alerts.0.open', true)
+            ->assertJsonPath('alerts.0.siteIdentityId', null);
     }
 }

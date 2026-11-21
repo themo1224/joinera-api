@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 /**
- * Plan 4 — challenge creates BlockEvent, pauses site identity, queues Staff alert.
+ * Plan 4 / 25 — challenge creates open BlockEvent, pauses site identity when present, queues Staff alert.
  */
 class ModeBChallengeBlockTest extends TestCase
 {
@@ -72,6 +72,8 @@ class ModeBChallengeBlockTest extends TestCase
         $this->assertSame(1, BlockEvent::query()->where('application_id', $application->id)->count());
         $block = BlockEvent::query()->where('application_id', $application->id)->first();
         $this->assertSame(BlockEvent::KIND_CAPTCHA, $block->observed_kind);
+        $this->assertNull($block->resolved_at);
+        $this->assertTrue($block->isOpen());
         $this->assertSame($application->user_id, $block->user_id);
         $this->assertSame($application->site, $block->site);
 
@@ -96,9 +98,57 @@ class ModeBChallengeBlockTest extends TestCase
         ))->handle();
 
         $this->assertSame(1, AdminAlert::query()->where('kind', AdminAlert::KIND_APPLY_CHALLENGE)->count());
+        $alert = AdminAlert::query()->where('kind', AdminAlert::KIND_APPLY_CHALLENGE)->first();
+        $this->assertTrue($alert->payload['needs_help'] ?? false);
+        $this->assertStringContainsString('Needs help', (string) ($alert->payload['message'] ?? ''));
+        $this->assertSame(
+            'https://karriere.firma.example.test/challenge/apply',
+            $alert->payload['company_apply_url'] ?? null,
+        );
     }
 
-    private function makeReadyApplication(): Application
+    public function test_challenge_without_site_identity_still_opens_block_and_persists_form_plan(): void
+    {
+        Queue::fake([RecordApplyChallengeAlert::class]);
+
+        $formPlan = [
+            'version' => 1,
+            'block' => ['kind' => 'cookie_wall', 'page_url' => 'https://karriere.firma.example.test/cookies', 'paused' => true],
+            'ready' => false,
+        ];
+
+        $this->app->instance(ModeBBrowserPort::class, new class($formPlan) implements ModeBBrowserPort
+        {
+            /** @param  array<string, mixed>  $formPlan */
+            public function __construct(private readonly array $formPlan) {}
+
+            public function submit(int $userId, string $siteId, int $applicationId): ModeBBrowserResult
+            {
+                return ModeBBrowserResult::challenge('cookie_wall', $this->formPlan);
+            }
+        });
+
+        $application = $this->makeReadyApplication(withSiteIdentity: false);
+
+        $this->app->call([new SubmitApplicationJob($application->id), 'handle']);
+
+        $attempt = ApplyAttempt::query()->where('application_id', $application->id)->first();
+        $this->assertNotNull($attempt);
+        $this->assertSame(ApplyAttemptKind::Challenge, $attempt->kind);
+        $this->assertSame(BlockEvent::KIND_COOKIE_WALL, $attempt->stop_reason);
+        $this->assertIsArray($attempt->form_plan);
+        $this->assertTrue($attempt->form_plan['block']['paused'] ?? false);
+
+        $block = BlockEvent::query()->where('application_id', $application->id)->first();
+        $this->assertNotNull($block);
+        $this->assertSame(BlockEvent::KIND_COOKIE_WALL, $block->observed_kind);
+        $this->assertNull($block->resolved_at);
+
+        $this->assertSame(0, SiteIdentity::query()->where('user_id', $application->user_id)->count());
+        Queue::assertPushed(RecordApplyChallengeAlert::class);
+    }
+
+    private function makeReadyApplication(bool $withSiteIdentity = true): Application
     {
         $approver = User::factory()->staff()->create();
         $applicant = User::factory()->create();
@@ -117,14 +167,16 @@ class ModeBChallengeBlockTest extends TestCase
             'apply_url' => 'https://karriere.firma.example.test/challenge/apply',
         ]);
 
-        SiteIdentity::factory()
-            ->for($applicant)
-            ->healthy()
-            ->create([
-                'site' => $listing->source,
-                'paused' => false,
-                'state' => SiteIdentityState::Healthy,
-            ]);
+        if ($withSiteIdentity) {
+            SiteIdentity::factory()
+                ->for($applicant)
+                ->healthy()
+                ->create([
+                    'site' => $listing->source,
+                    'paused' => false,
+                    'state' => SiteIdentityState::Healthy,
+                ]);
+        }
 
         $application = Application::factory()
             ->for($applicant)

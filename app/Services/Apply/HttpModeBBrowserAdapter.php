@@ -61,8 +61,8 @@ class HttpModeBBrowserAdapter implements ModeBBrowserPort
                 $formPlan,
             ),
             ModeBBrowserOutcome::IdentityMismatch => ModeBBrowserResult::identityMismatch($detail, $formPlan),
-            ModeBBrowserOutcome::Challenge => ModeBBrowserResult::challenge($detail),
-            ModeBBrowserOutcome::Retryable => ModeBBrowserResult::retryable($detail),
+            ModeBBrowserOutcome::Challenge => ModeBBrowserResult::challenge($detail, $formPlan),
+            ModeBBrowserOutcome::Retryable => ModeBBrowserResult::retryable($detail, $formPlan),
         };
     }
 }

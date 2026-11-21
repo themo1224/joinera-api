@@ -9,7 +9,6 @@ use App\Models\SiteIdentity;
 use App\Services\BuildBlockAlertOpsItem;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\DB;
 
 class StaffBlockEventController extends Controller
 {
@@ -48,55 +47,28 @@ class StaffBlockEventController extends Controller
             });
         }
 
-        $openCount = (clone $base)
-            ->whereExists(function ($query): void {
-                $query->select(DB::raw(1))
-                    ->from('site_identities')
-                    ->whereColumn('site_identities.user_id', 'block_events.user_id')
-                    ->whereColumn('site_identities.site', 'block_events.site')
-                    ->where('site_identities.paused', true);
-            })
-            ->count();
+        // Plan 25 — open = unresolved BlockEvent (independent of board SiteIdentity pause).
+        $openCount = (clone $base)->whereNull('resolved_at')->count();
 
         $opens = $request->opens();
         // Default: open alerts only when no open filter is provided.
         if ($opens === []) {
-            $base->whereExists(function ($query): void {
-                $query->select(DB::raw(1))
-                    ->from('site_identities')
-                    ->whereColumn('site_identities.user_id', 'block_events.user_id')
-                    ->whereColumn('site_identities.site', 'block_events.site')
-                    ->where('site_identities.paused', true);
-            });
+            $base->whereNull('resolved_at');
         } else {
             $wantOpen = in_array('true', $opens, true);
             $wantClosed = in_array('false', $opens, true);
 
             if ($wantOpen && ! $wantClosed) {
-                $base->whereExists(function ($query): void {
-                    $query->select(DB::raw(1))
-                        ->from('site_identities')
-                        ->whereColumn('site_identities.user_id', 'block_events.user_id')
-                        ->whereColumn('site_identities.site', 'block_events.site')
-                        ->where('site_identities.paused', true);
-                });
+                $base->whereNull('resolved_at');
             } elseif ($wantClosed && ! $wantOpen) {
-                $base->where(function (Builder $q): void {
-                    $q->whereNotExists(function ($query): void {
-                        $query->select(DB::raw(1))
-                            ->from('site_identities')
-                            ->whereColumn('site_identities.user_id', 'block_events.user_id')
-                            ->whereColumn('site_identities.site', 'block_events.site')
-                            ->where('site_identities.paused', true);
-                    });
-                });
+                $base->whereNotNull('resolved_at');
             }
         }
 
         $this->applySort($base, $request->input('sort'));
 
         $total = (clone $base)->count();
-        $events = $base->with('user')->offset($offset)->limit($limit)->get();
+        $events = $base->with(['user', 'application.listing'])->offset($offset)->limit($limit)->get();
 
         if ($events->isEmpty()) {
             $identities = collect();

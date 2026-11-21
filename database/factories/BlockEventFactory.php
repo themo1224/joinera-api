@@ -24,6 +24,15 @@ class BlockEventFactory extends Factory
             'site' => 'azubiyo',
             'application_id' => Application::factory(),
             'observed_kind' => BlockEvent::KIND_CAPTCHA,
+            // Plan 25 — factory defaults to open pause (unresolved).
+            'resolved_at' => null,
         ];
+    }
+
+    public function resolved(): static
+    {
+        return $this->state(fn (): array => [
+            'resolved_at' => now(),
+        ]);
     }
 }

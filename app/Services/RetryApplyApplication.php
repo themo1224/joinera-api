@@ -9,15 +9,18 @@ use App\Jobs\SubmitApplicationJob;
 use App\Models\Application;
 use App\Models\ApplyAttempt;
 use App\Models\SiteIdentity;
+use App\Support\ApplyUrlPreference;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Staff re-dispatch of Mode B apply for an applying Application.
+ * Plan 29 — company-site retries do not require board SiteIdentity; soft vs hard is enforced by the job.
  */
 class RetryApplyApplication
 {
     public function __construct(
         private readonly AssertApplicationDocsReadyForModeB $docsReady,
+        private readonly ResolveOpenBlockEvents $resolveOpenBlockEvents,
     ) {}
 
     /**
@@ -26,7 +29,7 @@ class RetryApplyApplication
     public function handle(Application $application): array
     {
         $application->refresh();
-        $application->loadMissing(['user.profile']);
+        $application->loadMissing(['user.profile', 'listing']);
 
         if ($application->status === ApplicationStatus::Submitted) {
             return ['ok' => false, 'code' => 'application_already_submitted'];
@@ -54,6 +57,8 @@ class RetryApplyApplication
             return ['ok' => false, 'code' => 'profile_not_approved'];
         }
 
+        $target = $this->applyTarget($application);
+
         /** @var SiteIdentity|null $identity */
         $identity = SiteIdentity::query()
             ->where('user_id', $application->user_id)
@@ -61,12 +66,15 @@ class RetryApplyApplication
             ->where('state', SiteIdentityState::Healthy)
             ->first();
 
-        if ($identity === null) {
+        // Plan 29 — board Easy-Apply still needs a healthy identity; company-site does not.
+        if ($target !== 'company' && $identity === null) {
             return ['ok' => false, 'code' => 'site_not_ready'];
         }
 
-        DB::transaction(function () use ($identity): void {
-            if ($identity->paused) {
+        DB::transaction(function () use ($application, $identity): void {
+            $this->resolveOpenBlockEvents->forApplication((int) $application->id);
+
+            if ($identity !== null && $identity->paused) {
                 $identity->paused = false;
                 $identity->save();
             }
@@ -75,5 +83,21 @@ class RetryApplyApplication
         SubmitApplicationJob::dispatch($application->id);
 
         return ['ok' => true];
+    }
+
+    /**
+     * @return 'company'|'board'|'missing'
+     */
+    private function applyTarget(Application $application): string
+    {
+        $listing = $application->listing;
+        if ($listing === null) {
+            return 'missing';
+        }
+
+        $url = $listing->apply_url ?: $listing->url;
+        $source = (string) ($application->site ?: $listing->source);
+
+        return ApplyUrlPreference::applyTarget($source, $url);
     }
 }

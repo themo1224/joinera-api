@@ -14,11 +14,13 @@ use Illuminate\Queue\Middleware\WithoutOverlapping;
 
 /**
  * Mode B submit job — claim applying, gate on docs readiness, then Plan 3 hook.
+ * Plan 29 — only ModeBRetryableException retries (tries/backoff). Challenge + hard_fail stop cleanly.
  */
 class SubmitApplicationJob implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
+    /** Plan 29 — soft failures only; challenge/hard_fail do not throw so they never loop. */
     public int $tries = 3;
 
     /** @var list<int> */

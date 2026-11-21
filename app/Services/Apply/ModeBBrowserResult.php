@@ -32,13 +32,19 @@ final readonly class ModeBBrowserResult
         return new self(ModeBBrowserOutcome::IdentityMismatch, detail: $detail, formPlan: $formPlan);
     }
 
-    public static function challenge(?string $detail = null): self
+    /**
+     * @param  array<string, mixed>|null  $formPlan
+     */
+    public static function challenge(?string $detail = null, ?array $formPlan = null): self
     {
-        return new self(ModeBBrowserOutcome::Challenge, detail: $detail);
+        return new self(ModeBBrowserOutcome::Challenge, detail: $detail, formPlan: $formPlan);
     }
 
-    public static function retryable(?string $detail = null): self
+    /**
+     * @param  array<string, mixed>|null  $formPlan
+     */
+    public static function retryable(?string $detail = null, ?array $formPlan = null): self
     {
-        return new self(ModeBBrowserOutcome::Retryable, detail: $detail);
+        return new self(ModeBBrowserOutcome::Retryable, detail: $detail, formPlan: $formPlan);
     }
 }

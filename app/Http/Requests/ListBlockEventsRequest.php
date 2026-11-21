@@ -35,6 +35,7 @@ class ListBlockEventsRequest extends FormRequest
                 BlockEvent::KIND_CAPTCHA,
                 BlockEvent::KIND_TWO_FACTOR,
                 BlockEvent::KIND_LOGIN_WALL,
+                BlockEvent::KIND_COOKIE_WALL,
             ];
 
             foreach ($this->kinds() as $kind) {

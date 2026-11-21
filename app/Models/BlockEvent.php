@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'site',
     'application_id',
     'observed_kind',
+    'resolved_at',
 ])]
 class BlockEvent extends Model
 {
@@ -24,6 +25,9 @@ class BlockEvent extends Model
     public const KIND_TWO_FACTOR = 'two_factor';
 
     public const KIND_LOGIN_WALL = 'login_wall';
+
+    /** Plan 25 — undismissable cookie/CMP overlay. */
+    public const KIND_COOKIE_WALL = 'cookie_wall';
 
     /**
      * @return BelongsTo<User, $this>
@@ -39,5 +43,20 @@ class BlockEvent extends Model
     public function application(): BelongsTo
     {
         return $this->belongsTo(Application::class);
+    }
+
+    public function isOpen(): bool
+    {
+        return $this->resolved_at === null;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'resolved_at' => 'datetime',
+        ];
     }
 }

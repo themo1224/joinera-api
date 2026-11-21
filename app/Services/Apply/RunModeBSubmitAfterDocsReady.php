@@ -14,6 +14,7 @@ use App\Models\Application;
 use App\Models\ApplyAttempt;
 use App\Models\BlockEvent;
 use App\Models\SiteIdentity;
+use App\Support\ScrubSecrets;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -75,7 +76,7 @@ class RunModeBSubmitAfterDocsReady implements ModeBSubmitAfterDocsReady
             $attempt->stop_reason = null;
             // Plan 16 — keep form_plan on success for Staff replay/debug.
             if (is_array($result->formPlan)) {
-                $attempt->form_plan = $result->formPlan;
+                $attempt->form_plan = ScrubSecrets::array($result->formPlan);
             }
             $attempt->save();
 
@@ -94,7 +95,7 @@ class RunModeBSubmitAfterDocsReady implements ModeBSubmitAfterDocsReady
         $attempt->confirmation_reference = null;
         // Plan 10 — persist form plan for replay/debug (even when missing_info).
         if (is_array($result->formPlan)) {
-            $attempt->form_plan = $result->formPlan;
+            $attempt->form_plan = ScrubSecrets::array($result->formPlan);
         }
         $attempt->save();
     }
@@ -108,20 +109,27 @@ class RunModeBSubmitAfterDocsReady implements ModeBSubmitAfterDocsReady
 
         $blockEventId = null;
 
-        DB::transaction(function () use ($application, $attempt, $observed, &$blockEventId): void {
+        DB::transaction(function () use ($application, $attempt, $observed, $result, &$blockEventId): void {
             $attempt->kind = ApplyAttemptKind::Challenge;
             $attempt->stop_reason = $observed;
             $attempt->confirmation_reference = null;
+            // Plan 25/28 — keep scrubbed form_plan (incl. block audit) for Staff pause triage.
+            if (is_array($result->formPlan)) {
+                $attempt->form_plan = ScrubSecrets::array($result->formPlan);
+            }
             $attempt->save();
 
+            // Plan 25 — open pause = resolved_at null (works without board SiteIdentity).
             $block = BlockEvent::query()->create([
                 'user_id' => $application->user_id,
                 'site' => $application->site,
                 'application_id' => $application->id,
                 'observed_kind' => $observed,
+                'resolved_at' => null,
             ]);
             $blockEventId = $block->id;
 
+            // Legacy board path: also pause SiteIdentity when present.
             SiteIdentity::query()
                 ->where('user_id', $application->user_id)
                 ->where('site', $application->site)
@@ -143,6 +151,10 @@ class RunModeBSubmitAfterDocsReady implements ModeBSubmitAfterDocsReady
         $attempt->kind = ApplyAttemptKind::Retryable;
         $attempt->stop_reason = $result->detail;
         $attempt->confirmation_reference = null;
+        // Plan 28/29 — soft failure audit only; challenge/hard paths do not throw (no infinite loop).
+        if (is_array($result->formPlan)) {
+            $attempt->form_plan = ScrubSecrets::array($result->formPlan);
+        }
         $attempt->save();
 
         throw new ModeBRetryableException($result->detail ?? 'mode_b_retryable');
@@ -154,7 +166,9 @@ class RunModeBSubmitAfterDocsReady implements ModeBSubmitAfterDocsReady
 
         return match ($raw) {
             BlockEvent::KIND_TWO_FACTOR, '2fa', 'two-factor' => BlockEvent::KIND_TWO_FACTOR,
-            BlockEvent::KIND_LOGIN_WALL, 'login' => BlockEvent::KIND_LOGIN_WALL,
+            BlockEvent::KIND_LOGIN_WALL, 'login', 'soft_signup_failed', 'missing_apply_email', 'not_simple_signup' => BlockEvent::KIND_LOGIN_WALL,
+            BlockEvent::KIND_COOKIE_WALL, 'cookie', 'cookie-wall' => BlockEvent::KIND_COOKIE_WALL,
+            BlockEvent::KIND_CAPTCHA => BlockEvent::KIND_CAPTCHA,
             default => BlockEvent::KIND_CAPTCHA,
         };
     }

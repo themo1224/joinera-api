@@ -171,12 +171,31 @@ class StaffApplicationRetryApplyTest extends TestCase
         Queue::assertNothingPushed();
     }
 
-    public function test_missing_site_identity_returns_409(): void
+    public function test_company_site_retry_without_site_identity_is_allowed(): void
     {
         Queue::fake([SubmitApplicationJob::class]);
 
         $staff = User::factory()->staff()->create();
+        // Plan 29 — company apply_url does not need board SiteIdentity.
         $application = $this->makeRetryableApplication(withSiteIdentity: false);
+
+        $this->actingAs($staff, 'sanctum')
+            ->postJson('/api/v1/applications/'.$application->id.'/retry-apply')
+            ->assertStatus(202)
+            ->assertJsonPath('success', true);
+
+        Queue::assertPushed(SubmitApplicationJob::class);
+    }
+
+    public function test_board_only_retry_without_site_identity_returns_409(): void
+    {
+        Queue::fake([SubmitApplicationJob::class]);
+
+        $staff = User::factory()->staff()->create();
+        $application = $this->makeRetryableApplication(
+            withSiteIdentity: false,
+            boardOnlyApplyUrl: true,
+        );
 
         $this->actingAs($staff, 'sanctum')
             ->postJson('/api/v1/applications/'.$application->id.'/retry-apply')
@@ -193,6 +212,7 @@ class StaffApplicationRetryApplyTest extends TestCase
         bool $withSiteIdentity = true,
         bool $sitePaused = false,
         bool $withDocs = true,
+        bool $boardOnlyApplyUrl = false,
     ): Application {
         $approver = User::factory()->staff()->create();
         $applicant = $owner ?? User::factory()->create();
@@ -214,7 +234,9 @@ class StaffApplicationRetryApplyTest extends TestCase
 
         $listing = Listing::factory()->forSource('azubiyo')->create([
             'url' => 'https://www.azubiyo.de/stellen/retry',
-            'apply_url' => 'https://karriere.firma.example.test/retry/apply',
+            'apply_url' => $boardOnlyApplyUrl
+                ? 'https://www.azubiyo.de/stellen/retry/bewerben'
+                : 'https://karriere.firma.example.test/retry/apply',
         ]);
 
         if ($withSiteIdentity) {

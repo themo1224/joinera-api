@@ -60,7 +60,7 @@
 | 21 | Privacy / consent | Cookie banners and “I agree” boxes get handled. **Done (2026-11-20):** `dismissCookieConsent` before inspect/fill; in-form consent via Plans 8/12 + soft-signup helper. |
 | 22 | Required traps | Hidden required fields and errors are found and fixed. **Done (2026-11-20):** `listHiddenRequired` + one post-submit trap retry; never invent answers. |
 | 23 | Weird layouts | Unusual pages still get a best-effort fill path. **Done (2026-11-21):** open shadow + formless/contenteditable locate; same-origin apply iframe pick; `layout_fallbacks` audit. |
-| 24 | End-of-flow proof | Final “thank you” / confirmation screens are recognized. |
+| 24 | End-of-flow proof | Final “thank you” / confirmation screens are recognized. **Done (2026-11-21):** ranked visible markers + apply-sent text + URL; FP guard; `form_plan.confirmation` audit. |
 
 ---
 
@@ -69,11 +69,11 @@
 
 | # | Plan name | Short description |
 | --- | --- | --- |
-| 25 | Pause on blocks | Captcha, codes, or hard walls pause the run — no silent fail. |
-| 26 | Alert Staff | Someone on the team gets a clear “needs help” signal. |
-| 27 | Manual finish link | Staff opens the same company page and finishes by hand. |
-| 28 | Safe secrets | Passwords and logins stay protected and audited. |
-| 29 | Retry smart | Soft failures can retry; hard ones do not loop forever. |
+| 25 | Pause on blocks | Captcha, codes, or hard walls pause the run — no silent fail. **Done (2026-11-21):** `detectChallenge` OTP/captcha; `cookie_wall` when CMP undismissable; `form_plan.block`; open `BlockEvent.resolved_at` (no SiteIdentity required). |
+| 26 | Alert Staff | Someone on the team gets a clear “needs help” signal. **Done (2026-11-21):** `AdminAlert` payload `needs_help` + message; block ops item `needsHelp` / `needsHelpMessage`. |
+| 27 | Manual finish link | Staff opens the same company page and finishes by hand. **Done (2026-11-21):** `companyApplyUrl` on block + application ops items; Blocks + Queue UI “Open company apply page”. |
+| 28 | Safe secrets | Passwords and logins stay protected and audited. **Done (2026-11-21):** soft-signup password session-only; worker `scrubApplyResult` + Laravel `ScrubSecrets`; break-glass audit unchanged. |
+| 29 | Retry smart | Soft failures can retry; hard ones do not loop forever. **Done (2026-11-21):** job retries only `ModeBRetryableException`; challenge/hard stop; company retry without SiteIdentity; clears open blocks. |
 
 ---
 
@@ -91,7 +91,7 @@
 
 ---
 
-## Plan notes (3–23)
+## Plan notes (3–29)
 
 ### 3 — Stop board apply
 - **Claim:** approved profile + ready GMX + **company** `apply_url`. Board `SiteIdentity` is not required.
@@ -214,6 +214,44 @@
 - Audit: `form_plan.layout_fallbacks` (`shadow_used`, `iframe_src`, `locate_strategies`).
 - Non-goals: closed shadow, cross-origin embeds, full ATS widgets.
 - **Evidence:** `weird-layouts.js`, `weird-no-form.html`, `weird-shadow.html`, `npm run test:form-inspect` + `test:company-site-mock`.
+
+### 24 — End-of-flow proof
+- Ranked `confirmSuccess`: visible data markers → tight DE/EN apply-sent phrases → URL `/success|/danke|…`.
+- Rejects weak text while apply submit/next still visible (footer “Vielen Dank” false positives).
+- Confirm on top-level page then work frame; open-shadow marker/text scan (depth ≤ 2).
+- Audit: `form_plan.confirmation` (`detected`, `method`, `reference_source`, `page_url`).
+- Boards (`azubiyo` / `arbeitsagentur`) reuse shared helper.
+- **Evidence:** `confirmSuccess`, `success-text-only.html`, `apply-thanks-boilerplate.html`, `npm run test:form-fill` + `test:company-site-mock`.
+
+### 25 — Pause on blocks
+- Detect captcha widgets, OTP/2FA code walls, login walls, and undismissable cookie/CMP overlays.
+- Return `outcome: challenge` immediately — never invent answers or continue past a hard wall.
+- Audit: `form_plan.block` (`kind`, `page_url`, `paused`).
+- Laravel: persist `form_plan` on challenge; open `BlockEvent` with `resolved_at` null (works without board `SiteIdentity`); still pause identity when present.
+- New kind: `cookie_wall` (deferred from Plan 21).
+- **Evidence:** `detectChallenge` / `isCookieBannerVisible`, captcha/two-factor/cookie-wall fixtures, `ResolveOpenBlockEvents`, `ModeBChallengeBlockTest`, `StaffBlockEventListTest`, `npm run test:form-inspect` + `test:company-site-mock`.
+
+### 26 — Alert Staff
+- Challenge → `RecordApplyChallengeAlert` writes `AdminAlert` with `needs_help: true` and a plain-English message (who / job / kind / site).
+- Ops blocks list exposes `needsHelp` + `needsHelpMessage` so Staff see an open pause without digging.
+- **Evidence:** `RecordApplyChallengeAlert`, `BuildBlockAlertOpsItem`, `ModeBChallengeBlockTest`, `StaffBlockEventListTest`.
+
+### 27 — Manual finish link
+- Same company `apply_url` (fallback listing URL) on block alerts and application ops payloads as `companyApplyUrl`.
+- Staff UI: Blocks row action + Queue application detail CTA open that URL in a new tab.
+- **Evidence:** `BuildBlockAlertOpsItem`, `BuildApplicationOpsItem`, admin Blocks/Queue UI, `StaffBlockEventListTest`.
+
+### 28 — Safe secrets
+- Soft-signup password stays session-only and is never returned in worker results (Plan 20).
+- Worker `scrubApplyResult` + Laravel `ScrubSecrets` redact password/secret keys before persistence.
+- Board break-glass reveal remains reason-required + audited (`BreakGlassRevealSiteSecret` / `StaffAccessAudit`).
+- **Evidence:** `safe-secrets.js`, `ScrubSecrets`, `npm run test:safe-secrets`, `ScrubSecretsTest`.
+
+### 29 — Retry smart
+- Soft: `outcome: retryable` → `ModeBRetryableException` → job `tries=3` with backoff.
+- Hard / challenge: persist attempt and return (no throw) so the job does not loop.
+- Staff retry: company-site applies work without board `SiteIdentity`; clears open `BlockEvent`s and unpauses identity when present.
+- **Evidence:** `SubmitApplicationJob`, `RetryApplyApplication`, `ResolveOpenBlockEvents`, `StaffApplicationRetryApplyTest`.
 
 ---
 

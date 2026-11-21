@@ -29,6 +29,7 @@ class BuildApplicationOpsItem
      *     docsFailureCode: string|null,
      *     hasCv: bool,
      *     hasCover: bool,
+     *     companyApplyUrl: string|null,
      *     updatedAt: string|null,
      *     attempts: list<array{kind: string|null, stopReason: string|null, createdAt: string|null}>
      * }
@@ -41,6 +42,7 @@ class BuildApplicationOpsItem
         $listing = $application->listing;
         $match = $application->candidateListingMatch;
         $artifacts = $application->docArtifacts;
+        $companyApplyUrl = $listing?->apply_url ?: $listing?->url;
 
         return [
             'id' => $application->id,
@@ -63,6 +65,10 @@ class BuildApplicationOpsItem
             'hasCover' => $artifacts->contains(
                 static fn ($artifact): bool => $artifact->kind === DocArtifactKind::Cover,
             ),
+            // Plan 27 — Staff opens the same company apply page to finish by hand.
+            'companyApplyUrl' => is_string($companyApplyUrl) && $companyApplyUrl !== ''
+                ? $companyApplyUrl
+                : null,
             'updatedAt' => $application->updated_at?->toISOString(),
             'attempts' => $this->attemptsPayload($application->applyAttempts),
         ];

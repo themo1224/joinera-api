@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Enums\DocArtifactKind;
+use App\Enums\DocumentAssetKind;
 use App\Models\Application;
 use App\Models\DocArtifact;
+use App\Models\ProfileDocumentAsset;
 use App\Models\SiteIdentity;
 use App\Support\ApplyUrlPreference;
 use App\Support\ModeBCandidatePack;
@@ -20,7 +22,13 @@ class InternalModeBContextController extends Controller
 {
     public function show(Request $request, Application $application): JsonResponse
     {
-        $application->loadMissing(['listing', 'docArtifacts', 'user.profile', 'user.mailboxIdentity']);
+        $application->loadMissing([
+            'listing',
+            'docArtifacts',
+            'user.profile',
+            'user.mailboxIdentity',
+            'user.profileDocumentAssets',
+        ]);
 
         $identity = SiteIdentity::query()
             ->where('user_id', $application->user_id)
@@ -39,6 +47,8 @@ class InternalModeBContextController extends Controller
             ? ModeBCandidatePack::fromUser($application->user)
             : ModeBCandidatePack::empty();
 
+        $candidate['cover_letter'] = $this->coverLetterText($application);
+
         $applyUrl = $application->listing?->apply_url ?? $application->listing?->url;
         $source = (string) ($application->site ?: $application->listing?->source ?: '');
         $applyTarget = ApplyUrlPreference::applyTarget($source, $applyUrl);
@@ -56,20 +66,33 @@ class InternalModeBContextController extends Controller
             'artifacts' => [
                 'cv' => $cv,
                 'cover' => $cover,
+                'passport' => $this->profileDocMeta($application, DocumentAssetKind::Passport, $prefix),
+                'language_cert' => $this->profileDocMeta($application, DocumentAssetKind::LanguageCert, $prefix),
+                'education_cert' => $this->profileDocMeta($application, DocumentAssetKind::EducationCert, $prefix),
             ],
         ]);
     }
 
     public function artifact(Application $application, string $kind): StreamedResponse|JsonResponse
     {
-        $enum = DocArtifactKind::tryFrom($kind);
-        if ($enum === null) {
-            return response()->json([
-                'code' => 'validation_failed',
-                'message' => 'Unknown artifact kind.',
-            ], 422);
+        $docEnum = DocArtifactKind::tryFrom($kind);
+        if ($docEnum !== null) {
+            return $this->streamDocArtifact($application, $docEnum);
         }
 
+        $profileKind = DocumentAssetKind::tryFrom($kind);
+        if ($profileKind !== null) {
+            return $this->streamProfileDocument($application, $profileKind);
+        }
+
+        return response()->json([
+            'code' => 'validation_failed',
+            'message' => 'Unknown artifact kind.',
+        ], 422);
+    }
+
+    private function streamDocArtifact(Application $application, DocArtifactKind $enum): StreamedResponse|JsonResponse
+    {
         /** @var DocArtifact|null $artifact */
         $artifact = DocArtifact::query()
             ->where('application_id', $application->id)
@@ -92,6 +115,36 @@ class InternalModeBContextController extends Controller
         );
     }
 
+    private function streamProfileDocument(Application $application, DocumentAssetKind $kind): StreamedResponse|JsonResponse
+    {
+        $application->loadMissing(['user.profileDocumentAssets']);
+
+        /** @var ProfileDocumentAsset|null $asset */
+        $asset = $application->user?->profileDocumentAssets
+            ->first(static function (ProfileDocumentAsset $row) use ($kind): bool {
+                $rowKind = $row->kind instanceof DocumentAssetKind
+                    ? $row->kind
+                    : DocumentAssetKind::tryFrom((string) $row->kind);
+
+                return $rowKind === $kind;
+            });
+
+        if ($asset === null || ! Storage::disk($asset->disk)->exists($asset->path)) {
+            return response()->json([
+                'code' => 'not_found',
+                'message' => 'Profile document missing.',
+            ], 404);
+        }
+
+        $filename = $asset->original_name ?: ($kind->value.'-'.$application->user_id);
+
+        return Storage::disk($asset->disk)->response(
+            $asset->path,
+            $filename,
+            ['Content-Type' => $asset->mime ?: 'application/octet-stream'],
+        );
+    }
+
     /**
      * @return array{kind: string, url: string, filename: string}|null
      */
@@ -111,5 +164,69 @@ class InternalModeBContextController extends Controller
             'url' => $prefix.'/artifacts/'.$kind->value,
             'filename' => $kind->value.'-'.$application->id.'.pdf',
         ];
+    }
+
+    /**
+     * @return array{kind: string, url: string, filename: string}|null
+     */
+    private function profileDocMeta(Application $application, DocumentAssetKind $kind, string $prefix): ?array
+    {
+        $user = $application->user;
+        if ($user === null) {
+            return null;
+        }
+
+        /** @var ProfileDocumentAsset|null $asset */
+        $asset = $user->relationLoaded('profileDocumentAssets')
+            ? $user->profileDocumentAssets->first(static function (ProfileDocumentAsset $row) use ($kind): bool {
+                $rowKind = $row->kind instanceof DocumentAssetKind
+                    ? $row->kind
+                    : DocumentAssetKind::tryFrom((string) $row->kind);
+
+                return $rowKind === $kind;
+            })
+            : ProfileDocumentAsset::query()
+                ->where('user_id', $user->id)
+                ->where('kind', $kind)
+                ->first();
+
+        if ($asset === null) {
+            return null;
+        }
+
+        $filename = $asset->original_name ?: ($kind->value.'.pdf');
+
+        return [
+            'kind' => $kind->value,
+            'url' => $prefix.'/artifacts/'.$kind->value,
+            'filename' => $filename,
+        ];
+    }
+
+    private function coverLetterText(Application $application): ?string
+    {
+        /** @var DocArtifact|null $cover */
+        $cover = DocArtifact::query()
+            ->where('application_id', $application->id)
+            ->where('kind', DocArtifactKind::Cover)
+            ->first();
+
+        if ($cover === null) {
+            return null;
+        }
+
+        $sidecar = $cover->path.'.txt';
+        if (! Storage::disk($cover->disk)->exists($sidecar)) {
+            return null;
+        }
+
+        $text = Storage::disk($cover->disk)->get($sidecar);
+        if (! is_string($text)) {
+            return null;
+        }
+
+        $trimmed = trim($text);
+
+        return $trimmed !== '' ? $trimmed : null;
     }
 }

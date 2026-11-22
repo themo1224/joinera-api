@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ApplicantController;
+use App\Http\Controllers\ApplyLimitsController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\IdentityReadinessController;
 use App\Http\Controllers\InternalModeBContextController;
@@ -34,7 +35,7 @@ Route::prefix('v1')->group(function () {
     Route::middleware('mode_b_worker')->prefix('internal/mode-b')->group(function () {
         Route::get('applications/{application}', [InternalModeBContextController::class, 'show']);
         Route::get('applications/{application}/artifacts/{kind}', [InternalModeBContextController::class, 'artifact'])
-            ->whereIn('kind', ['cv', 'cover']);
+            ->whereIn('kind', ['cv', 'cover', 'passport', 'language_cert', 'education_cert']);
     });
 
     Route::middleware('auth:sanctum')->group(function () {
@@ -58,6 +59,9 @@ Route::prefix('v1')->group(function () {
 
         Route::get('identity/readiness', [IdentityReadinessController::class, 'show'])->middleware('user');
         Route::put('identity/readiness', [IdentityReadinessController::class, 'rejectPut'])->middleware('user');
+
+        // Plan 32 / P0-14 — human-like apply limits (null layers = configured=false).
+        Route::get('apply-limits', [ApplyLimitsController::class, 'show']);
 
         Route::post('listings/import', [ListingImportController::class, 'store'])->middleware('admin');
 

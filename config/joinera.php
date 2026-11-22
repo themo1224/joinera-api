@@ -90,6 +90,22 @@ return [
         'cap_window' => env('JOINERA_APPLY_CAP_WINDOW', 'daily'), // daily|weekly
     ],
 
+    // Plan 32 / P0-14 — human-like anti-block layers (null = inactive / configured=false).
+    'anti_block' => [
+        'jitter_min_seconds' => env('JOINERA_ANTI_BLOCK_JITTER_MIN') !== null && env('JOINERA_ANTI_BLOCK_JITTER_MIN') !== ''
+            ? max(0, (int) env('JOINERA_ANTI_BLOCK_JITTER_MIN'))
+            : null,
+        'jitter_max_seconds' => env('JOINERA_ANTI_BLOCK_JITTER_MAX') !== null && env('JOINERA_ANTI_BLOCK_JITTER_MAX') !== ''
+            ? max(0, (int) env('JOINERA_ANTI_BLOCK_JITTER_MAX'))
+            : null,
+        'max_per_hour_user_site' => env('JOINERA_ANTI_BLOCK_MAX_PER_HOUR') !== null && env('JOINERA_ANTI_BLOCK_MAX_PER_HOUR') !== ''
+            ? max(1, (int) env('JOINERA_ANTI_BLOCK_MAX_PER_HOUR'))
+            : null,
+        'cooldown_seconds_after_block' => env('JOINERA_ANTI_BLOCK_COOLDOWN_SECONDS') !== null && env('JOINERA_ANTI_BLOCK_COOLDOWN_SECONDS') !== ''
+            ? max(0, (int) env('JOINERA_ANTI_BLOCK_COOLDOWN_SECONDS'))
+            : null,
+    ],
+
     // Mode B browser worker (Playwright Node). Tests always bind FixtureModeBBrowserAdapter.
     'mode_b' => [
         // fixture | http — http calls the Playwright worker; fixture is local stub.

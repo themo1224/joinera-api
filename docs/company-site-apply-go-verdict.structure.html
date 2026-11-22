@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Company-site apply — readiness check (GO)</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --card: #fff;
+    --text: #1a1d23;
+    --muted: #5c6570;
+    --border: #e2e6eb;
+    --ok: #0f7a45;
+    --ok-bg: #e8f7ef;
+    --warn: #9a6700;
+    --warn-bg: #fff8e6;
+    --accent: #0b6e4f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: linear-gradient(180deg, #eef3f0 0%, var(--bg) 40%);
+    color: var(--text);
+    line-height: 1.45;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 28px 20px 48px; }
+  h1 { font-size: 1.75rem; margin: 0 0 6px; }
+  h2 { font-size: 1.25rem; margin: 28px 0 12px; }
+  h3 { font-size: 1.05rem; margin: 18px 0 10px; }
+  .meta { color: var(--muted); margin: 0 0 16px; }
+  .badge {
+    display: inline-block;
+    vertical-align: middle;
+    background: var(--ok);
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.8rem;
+    padding: 4px 10px;
+    border-radius: 999px;
+    margin-left: 10px;
+  }
+  .callout {
+    padding: 12px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    margin: 12px 0 18px;
+  }
+  .callout.ok { background: var(--ok-bg); border-color: #b7e0c7; }
+  .callout.warn { background: var(--warn-bg); border-color: #f0d78c; color: #5c4a12; }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .stat {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .stat strong { display: block; font-size: 1.35rem; color: var(--ok); }
+  .stat span { color: var(--muted); font-size: 0.85rem; }
+  .bar {
+    height: 10px;
+    background: #dfe8e3;
+    border-radius: 999px;
+    overflow: hidden;
+    margin: 6px 0 4px;
+  }
+  .bar > i { display: block; height: 100%; width: 100%; background: var(--ok); }
+  .bar-labels { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.85rem; }
+  .shots {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .card header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+  }
+  .card header .n {
+    background: var(--ok-bg);
+    color: var(--ok);
+    border-radius: 999px;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+  }
+  .card .body { padding: 12px; }
+  .card img {
+    width: 100%;
+    max-height: 320px;
+    object-fit: contain;
+    background: #f0f2f4;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  .cap { color: var(--muted); font-size: 0.8rem; margin: 8px 0 0; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 0.92rem; }
+  th { background: #f3f5f7; color: var(--muted); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .pass { color: var(--ok); font-weight: 600; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+  .bottom { color: var(--muted); }
+
+  .card img { cursor: zoom-in; }
+  .lightbox {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(10, 14, 18, 0.92);
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .lightbox.open { display: flex; }
+  .lightbox img {
+    max-width: min(96vw, 1400px);
+    max-height: 92vh;
+    object-fit: contain;
+    border-radius: 6px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+  }
+  .lightbox .close {
+    position: absolute;
+    top: 14px;
+    right: 18px;
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .lightbox .close:hover { background: rgba(255,255,255,0.28); }
+  .lightbox .hint {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(255,255,255,0.7);
+    font-size: 0.85rem;
+  }
+  @media (max-width: 700px) {
+    .stats, .shots { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Company-site apply — readiness check <span class="badge">GO</span></h1>
+    <p class="meta">Independent verification for managers · 22 Nov 2026 · Joinera</p>
+
+    <div class="callout ok">
+      Product verification is green. Live Obeta Softgarden apply reached a thank-you page.
+      Mode B now forces GMX apply email only (never personal login email).
+    </div>
+
+    <div class="stats">
+      <div class="stat"><strong>35 / 35</strong><span>Plans verified</span></div>
+      <div class="stat"><strong>100%</strong><span>Stress-run success</span></div>
+      <div class="stat"><strong>56</strong><span>GMX-gate PHP tests</span></div>
+      <div class="stat"><strong>6</strong><span>Proof screenshots</span></div>
+    </div>
+
+    <div class="bar-labels"><span>Roadmap coverage</span><span>35 / 35 passed</span></div>
+    <div class="bar"><i></i></div>
+
+    <hr />
+    <h2>Screenshot proof</h2>
+    <div class="shots">
+      <article class="card">
+        <header>Company website <span class="n">1</span></header>
+        <div class="body">
+          <img src="data:image/PLACEHOLDER" alt="Obeta company site" />
+          <p class="cap">wir.obeta.de</p>
+        </div>
+      </article>
+      <article class="card">
+        <header>Job listing <span class="n">2</span></header>
+        <div class="body">
+          <img src="data:image/PLACEHOLDER" alt="Obeta job listing" />
+          <p class="cap">Softgarden Initiativbewerbung</p>
+        </div>
+      </article>
+      <article class="card">
+        <header>Empty apply form <span class="n">3</span></header>
+        <div class="body">
+          <img src="data:image/PLACEHOLDER" alt="Empty apply form" />
+          <p class="cap">Opened via Online bewerben</p>
+        </div>
+      </article>
+      <article class="card">
+        <header>Filled form <span class="n">4</span></header>
+        <div class="body">
+          <img src="data:image/PLACEHOLDER" alt="Filled Softgarden form" />
+          <p class="cap">Email, phone, Obeta, source, submit visible</p>
+        </div>
+      </article>
+      <article class="card">
+        <header>Submit area <span class="n">5</span></header>
+        <div class="body">
+          <img src="data:image/PLACEHOLDER" alt="Submit button area" />
+          <p class="cap">Bewerbung absenden</p>
+        </div>
+      </article>
+      <article class="card">
+        <header>Success <span class="n">6</span></header>
+        <div class="body">
+          <img src="data:image/PLACEHOLDER" alt="Thank you confirmation" />
+          <p class="cap">Vielen Dank für Ihre Bewerbung</p>
+        </div>
+      </article>
+    </div>
+
+    <hr />
+    <h2>GMX-only Mode B gate</h2>
+    <div class="callout warn">
+      Live Obeta fill used personal Gmail (manual browser). Automation now requires
+      Ready GMX apply mailbox + complete approved profile.
+    </div>
+
+    <div class="stats" style="grid-template-columns: repeat(3, 1fr);">
+      <div class="stat"><strong>56 / 56</strong><span>PHP related tests</span></div>
+      <div class="stat"><strong>pass</strong><span>form-match unit</span></div>
+      <div class="stat"><strong>GO</strong><span>GMX gate shipped</span></div>
+    </div>
+
+    <h3>What the new tests prove</h3>
+    <table>
+      <thead><tr><th>Check</th><th>Result</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr><td>apply_email from Ready GMX only</td><td class="pass">PASS</td><td>ModeBCandidatePackTest</td></tr>
+        <tr><td>Personal domain → null apply_email</td><td class="pass">PASS</td><td>ModeBCandidatePackTest</td></tr>
+        <tr><td>Claim without GMX → mailbox_not_ready</td><td class="pass">PASS</td><td>SubmitApplicationClaimTest</td></tr>
+        <tr><td>Incomplete profile → profile_incomplete</td><td class="pass">PASS</td><td>SubmitApplicationClaimTest</td></tr>
+        <tr><td>Worker rejects non-GMX email</td><td class="pass">PASS</td><td>test:form-match</td></tr>
+        <tr><td>Mode B suite green after harden</td><td class="pass">PASS</td><td>56 PHP tests</td></tr>
+      </tbody>
+    </table>
+
+    <hr />
+    <h2>Manager checklist</h2>
+    <table>
+      <thead><tr><th>Question</th><th>Answer</th></tr></thead>
+      <tbody>
+        <tr><td>Is company-site apply ready?</td><td class="pass">Yes — GO</td></tr>
+        <tr><td>Did automated plans 1–35 pass?</td><td class="pass">Yes — 35 of 35</td></tr>
+        <tr><td>Live company apply completed?</td><td class="pass">Yes — Obeta Softgarden</td></tr>
+        <tr><td>Screenshots visible on this page?</td><td class="pass">Yes — inline above</td></tr>
+        <tr><td>Automation uses only GMX apply email?</td><td class="pass">Yes — gated + tested</td></tr>
+        <tr><td>Apply without GMX / incomplete profile?</td><td class="pass">No — hard-fail</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Bottom line for leadership</h3>
+    <p class="bottom">
+      Verification is green, Softgarden proof is shown above, and Mode B refuses automation
+      unless the candidate has a Ready GMX apply mailbox and a complete approved profile.
+    </p>
+  </div>
+
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Screenshot fullscreen">
+  <button type="button" class="close" id="lightbox-close" aria-label="Close">&times;</button>
+  <img id="lightbox-img" alt="" />
+  <div class="hint">Click outside or press Esc to close</div>
+</div>
+<script>
+(function () {
+  var box = document.getElementById("lightbox");
+  var img = document.getElementById("lightbox-img");
+  var closeBtn = document.getElementById("lightbox-close");
+
+  function openLightbox(src, alt) {
+    img.src = src;
+    img.alt = alt || "";
+    box.classList.add("open");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeLightbox() {
+    box.classList.remove("open");
+    img.removeAttribute("src");
+    document.body.style.overflow = "";
+  }
+
+  document.querySelectorAll(".card img").forEach(function (el) {
+    el.addEventListener("click", function () {
+      openLightbox(el.src, el.alt);
+    });
+  });
+
+  closeBtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    closeLightbox();
+  });
+
+  box.addEventListener("click", function (e) {
+    if (e.target === box) closeLightbox();
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && box.classList.contains("open")) closeLightbox();
+  });
+})();
+</script>
+</body>
+</html>

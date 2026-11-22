@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Enums\MailboxState;
 use App\Models\MailboxIdentity;
 use App\Models\Profile;
 use App\Models\User;
@@ -26,6 +27,7 @@ class ModeBCandidatePack
      *     available_from: string|null,
      *     willing_to_relocate: bool|null,
      *     about: string|null,
+     *     cover_letter: string|null,
      *     work_residence_note: string|null,
      *     driving_licenses: list<mixed>,
      *     education_entries: list<mixed>,
@@ -63,6 +65,7 @@ class ModeBCandidatePack
      *     available_from: string|null,
      *     willing_to_relocate: bool|null,
      *     about: string|null,
+     *     cover_letter: string|null,
      *     work_residence_note: string|null,
      *     driving_licenses: list<mixed>,
      *     education_entries: list<mixed>,
@@ -90,6 +93,7 @@ class ModeBCandidatePack
      *     available_from: string|null,
      *     willing_to_relocate: bool|null,
      *     about: string|null,
+     *     cover_letter: string|null,
      *     work_residence_note: string|null,
      *     driving_licenses: list<mixed>,
      *     education_entries: list<mixed>,
@@ -104,7 +108,8 @@ class ModeBCandidatePack
 
         return [
             'name' => $name !== '' ? $name : null,
-            'apply_email' => self::nullableString($mailbox?->address),
+            // GMX apply mailbox only — never User.email / personal login.
+            'apply_email' => self::gmxApplyEmail($mailbox),
             'date_of_birth' => self::dateString($profile?->date_of_birth),
             'city' => self::list($profile?->city),
             'province' => self::list($profile?->province),
@@ -115,6 +120,8 @@ class ModeBCandidatePack
             'available_from' => self::dateString($profile?->available_from),
             'willing_to_relocate' => is_bool($profile?->willing_to_relocate) ? $profile->willing_to_relocate : null,
             'about' => self::nullableString($profile?->about),
+            // Filled by InternalModeBContextController from cover artifact sidecar when present.
+            'cover_letter' => null,
             'work_residence_note' => self::nullableString($profile?->work_residence_note),
             'driving_licenses' => self::list($profile?->driving_licenses),
             'education_entries' => self::list($profile?->education_entries),
@@ -122,6 +129,28 @@ class ModeBCandidatePack
             'skills' => self::list($profile?->skills),
             'languages' => self::list($profile?->languages),
         ];
+    }
+
+    /**
+     * Ready + allowed GMX host only. Personal User.email must never appear here.
+     */
+    private static function gmxApplyEmail(?MailboxIdentity $mailbox): ?string
+    {
+        if ($mailbox === null || $mailbox->state !== MailboxState::Ready) {
+            return null;
+        }
+
+        $address = self::nullableString($mailbox->address);
+        if ($address === null) {
+            return null;
+        }
+
+        $validator = app(GmxAddressValidator::class);
+        if (! $validator->isAllowed($address)) {
+            return null;
+        }
+
+        return $validator->normalize($address);
     }
 
     private static function nullableString(mixed $value): ?string

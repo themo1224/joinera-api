@@ -95,7 +95,10 @@ class StaffApplicationShowTest extends TestCase
             ->assertJsonCount(3, 'attempts')
             ->assertJsonPath('attempts.0.kind', ApplyAttemptKind::Challenge->value)
             ->assertJsonPath('attempts.0.stopReason', 'captcha')
+            ->assertJsonPath('attempts.0.failureCode', 'captcha')
+            ->assertJsonPath('attempts.0.failureLabel', 'Captcha blocked the apply — Staff must finish')
             ->assertJsonPath('attempts.1.kind', ApplyAttemptKind::HardFail->value)
+            ->assertJsonPath('attempts.1.failureCode', 'identity_mismatch')
             ->assertJsonPath('attempts.2.kind', ApplyAttemptKind::Retryable->value)
             ->assertJsonStructure([
                 'attempts' => [['kind', 'stopReason', 'createdAt']],

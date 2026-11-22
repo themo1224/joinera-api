@@ -7,6 +7,7 @@ use App\Enums\ApplyAttemptKind;
 use App\Enums\IntakeRunSiteStatus;
 use App\Models\Application;
 use App\Models\ApplyAttempt;
+use App\Models\BlockEvent;
 use App\Models\DocArtifact;
 use App\Models\IntakeRunSite;
 use App\Models\SiteIdentity;
@@ -19,18 +20,37 @@ class BuildOpsReport
      *     generatedAt: string,
      *     intake: list<array{siteId: string, lastRunAt: string, newListingCount: int, errorCount: int}>,
      *     queue: array{queued: int, applying: int, submitted: int, hardFailAttempts: int, retryableAttempts: int},
-     *     blocks: array{openPauseCount: int, pausesBySite: list<array{siteId: string, openPauseCount: int}>, pausedApplicantIds: list<int>},
+     *     blocks: array{
+     *         openPauseCount: int,
+     *         openBlockEventCount: int,
+     *         staffHelpCount: int,
+     *         pausesBySite: list<array{siteId: string, openPauseCount: int}>,
+     *         pausedApplicantIds: list<int>,
+     *         challengesByKind: list<array{kind: string, count: int}>
+     *     },
+     *     applyOutcomes: array{
+     *         successAttempts: int,
+     *         challengeAttempts: int,
+     *         hardFailAttempts: int,
+     *         retryableAttempts: int,
+     *         successRate: float|null,
+     *         challengeRate: float|null,
+     *         staffHelpRate: float|null
+     *     },
      *     funnel: list<array{status: string, count: int}>,
      *     docCostUnits: int|null
      * }
      */
     public function handle(): array
     {
+        $applyOutcomes = $this->applyOutcomes();
+
         return [
             'generatedAt' => now()->toIso8601String(),
             'intake' => $this->intake(),
             'queue' => $this->queue(),
             'blocks' => $this->blocks(),
+            'applyOutcomes' => $applyOutcomes,
             'funnel' => $this->funnel(),
             'docCostUnits' => $this->docCostUnits(),
         ];
@@ -120,7 +140,14 @@ class BuildOpsReport
     }
 
     /**
-     * @return array{openPauseCount: int, pausesBySite: list<array{siteId: string, openPauseCount: int}>, pausedApplicantIds: list<int>}
+     * @return array{
+     *     openPauseCount: int,
+     *     openBlockEventCount: int,
+     *     staffHelpCount: int,
+     *     pausesBySite: list<array{siteId: string, openPauseCount: int}>,
+     *     pausedApplicantIds: list<int>,
+     *     challengesByKind: list<array{kind: string, count: int}>
+     * }
      */
     private function blocks(): array
     {
@@ -149,10 +176,85 @@ class BuildOpsReport
         $pausedApplicantIds = array_map('intval', array_keys($applicantIds));
         sort($pausedApplicantIds);
 
+        // Plan 33 — company-site open BlockEvents (may exist without SiteIdentity pause).
+        $openBlockEventCount = BlockEvent::query()->whereNull('resolved_at')->count();
+        $staffHelpCount = $openBlockEventCount;
+
+        $kindCounts = BlockEvent::query()
+            ->selectRaw('observed_kind, count(*) as c')
+            ->whereNull('resolved_at')
+            ->groupBy('observed_kind')
+            ->pluck('c', 'observed_kind')
+            ->map(fn ($count): int => (int) $count)
+            ->all();
+
+        $challengesByKind = [];
+        foreach ($kindCounts as $kind => $count) {
+            $challengesByKind[] = [
+                'kind' => (string) $kind,
+                'count' => $count,
+            ];
+        }
+        usort(
+            $challengesByKind,
+            static fn (array $a, array $b): int => $b['count'] <=> $a['count'] ?: strcmp($a['kind'], $b['kind']),
+        );
+
         return [
             'openPauseCount' => $paused->count(),
+            'openBlockEventCount' => $openBlockEventCount,
+            'staffHelpCount' => $staffHelpCount,
             'pausesBySite' => $pausesBySite,
             'pausedApplicantIds' => $pausedApplicantIds,
+            'challengesByKind' => $challengesByKind,
+        ];
+    }
+
+    /**
+     * Plan 33 — success / challenge / Staff-help rates for Mode B attempts.
+     *
+     * @return array{
+     *     successAttempts: int,
+     *     challengeAttempts: int,
+     *     hardFailAttempts: int,
+     *     retryableAttempts: int,
+     *     successRate: float|null,
+     *     challengeRate: float|null,
+     *     staffHelpRate: float|null
+     * }
+     */
+    private function applyOutcomes(): array
+    {
+        $attemptCounts = ApplyAttempt::query()
+            ->selectRaw('kind, count(*) as c')
+            ->whereIn('kind', [
+                ApplyAttemptKind::Success->value,
+                ApplyAttemptKind::Challenge->value,
+                ApplyAttemptKind::HardFail->value,
+                ApplyAttemptKind::Retryable->value,
+            ])
+            ->groupBy('kind')
+            ->pluck('c', 'kind')
+            ->map(fn ($count): int => (int) $count)
+            ->all();
+
+        $success = (int) ($attemptCounts[ApplyAttemptKind::Success->value] ?? 0);
+        $challenge = (int) ($attemptCounts[ApplyAttemptKind::Challenge->value] ?? 0);
+        $hardFail = (int) ($attemptCounts[ApplyAttemptKind::HardFail->value] ?? 0);
+        $retryable = (int) ($attemptCounts[ApplyAttemptKind::Retryable->value] ?? 0);
+        $total = $success + $challenge + $hardFail + $retryable;
+
+        $openBlocks = BlockEvent::query()->whereNull('resolved_at')->count();
+
+        return [
+            'successAttempts' => $success,
+            'challengeAttempts' => $challenge,
+            'hardFailAttempts' => $hardFail,
+            'retryableAttempts' => $retryable,
+            'successRate' => $total > 0 ? round($success / $total, 4) : null,
+            'challengeRate' => $total > 0 ? round($challenge / $total, 4) : null,
+            // Staff-help rate = open blocks / challenges (1.0 when every challenge still open).
+            'staffHelpRate' => $challenge > 0 ? round(min(1, $openBlocks / $challenge), 4) : ($openBlocks > 0 ? 1.0 : null),
         ];
     }
 

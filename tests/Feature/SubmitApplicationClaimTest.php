@@ -123,6 +123,30 @@ class SubmitApplicationClaimTest extends TestCase
         $this->assertSame(ApplicationStatus::Applying, $application->fresh()->status);
     }
 
+    public function test_ready_non_gmx_mailbox_writes_hard_fail_attempt(): void
+    {
+        $application = $this->makeClaimableApplication(mailboxReady: true, mailboxAddress: 'person@gmail.com');
+
+        $this->runJob($application->id);
+
+        $attempt = ApplyAttempt::query()->where('application_id', $application->id)->first();
+        $this->assertNotNull($attempt);
+        $this->assertSame(ApplyAttemptKind::HardFail, $attempt->kind);
+        $this->assertSame('mailbox_not_ready', $attempt->stop_reason);
+    }
+
+    public function test_incomplete_profile_writes_hard_fail_attempt(): void
+    {
+        $application = $this->makeClaimableApplication(profileComplete: false);
+
+        $this->runJob($application->id);
+
+        $attempt = ApplyAttempt::query()->where('application_id', $application->id)->first();
+        $this->assertNotNull($attempt);
+        $this->assertSame(ApplyAttemptKind::HardFail, $attempt->kind);
+        $this->assertSame('profile_incomplete', $attempt->stop_reason);
+    }
+
     public function test_board_only_apply_url_writes_hard_fail_attempt(): void
     {
         $application = $this->makeClaimableApplication(
@@ -181,18 +205,39 @@ class SubmitApplicationClaimTest extends TestCase
         ?User $owner = null,
         ApplicationStatus $status = ApplicationStatus::Applying,
         bool $approved = true,
+        bool $profileComplete = true,
         bool $withSiteIdentity = true,
         bool $sitePaused = false,
         bool $mailboxReady = true,
+        ?string $mailboxAddress = null,
         string $source = 'azubiyo',
         string $listingUrl = 'https://www.azubiyo.de/stellen/1',
         string $applyUrl = 'https://karriere.firma.example.test/apply',
     ): Application {
+        config([
+            'joinera.mailbox.allowed_hosts' => ['gmx.de', 'gmx.net'],
+        ]);
+
         $approver = User::factory()->staff()->create();
         $applicant = $owner ?? User::factory()->create();
 
         /** @var Profile $profile */
         $profile = $applicant->ensureProfile();
+        if ($profileComplete) {
+            $profile->fill([
+                'industry' => ['IT'],
+                'language' => 'de',
+                'education' => 'Abitur',
+                'desired_path' => 'ausbildung',
+            ]);
+        } else {
+            $profile->fill([
+                'industry' => [],
+                'language' => null,
+                'education' => null,
+                'desired_path' => null,
+            ]);
+        }
         if ($approved) {
             $profile->approval = ApprovalStatus::Approved;
             $profile->approved_by = $approver->id;
@@ -205,10 +250,18 @@ class SubmitApplicationClaimTest extends TestCase
         $profile->save();
 
         if ($mailboxReady) {
-            MailboxIdentity::factory()->ready()->for($applicant)->create();
+            $address = $mailboxAddress ?? ('claim.'.uniqid('', true).'@gmx.de');
+            $host = str_contains($address, '@') ? substr($address, strrpos($address, '@') + 1) : 'gmx.de';
+            MailboxIdentity::factory()->for($applicant)->create([
+                'state' => MailboxState::Ready,
+                'domain' => $host,
+                'address' => $address,
+            ]);
         } else {
             MailboxIdentity::factory()->for($applicant)->create([
                 'state' => MailboxState::Pending,
+                'domain' => 'gmx.de',
+                'address' => 'pending.'.uniqid('', true).'@gmx.de',
             ]);
         }
 

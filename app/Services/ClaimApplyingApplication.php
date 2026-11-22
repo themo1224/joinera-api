@@ -12,6 +12,7 @@ use App\Models\ApplyAttempt;
 use App\Models\MailboxIdentity;
 use App\Models\SiteIdentity;
 use App\Support\ApplyUrlPreference;
+use App\Support\GmxAddressValidator;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -21,7 +22,8 @@ use Illuminate\Support\Facades\DB;
  * When status is applying but gates fail, writes a hard_fail
  * ApplyAttempt with a stop_reason so Staff never see a silent hang.
  *
- * Company-site apply (PRD 1.8 / plan 3): requires approved profile + ready GMX.
+ * Company-site apply (PRD 1.8 / plan 3): requires approved + complete profile
+ * and a Ready allowed-GMX apply mailbox (never personal User.email).
  * Board SiteIdentity is NOT a claim gate for company URLs.
  * Board-only URLs hard-fail unless joinera.mode_b.allow_board_apply (legacy probes).
  */
@@ -54,6 +56,10 @@ class ClaimApplyingApplication
 
             if (! $this->profileApproved($application)) {
                 return $this->finalizeHardFail($application, 'profile_not_approved');
+            }
+
+            if (! $this->profileComplete($application)) {
+                return $this->finalizeHardFail($application, 'profile_incomplete');
             }
 
             if (! $this->mailboxReady($application)) {
@@ -99,12 +105,32 @@ class ClaimApplyingApplication
         return $profile !== null && $profile->approval === ApprovalStatus::Approved;
     }
 
+    private function profileComplete(Application $application): bool
+    {
+        $application->loadMissing(['user.profile', 'user.cvAsset']);
+        $user = $application->user;
+        $profile = $user?->profile;
+
+        if ($profile === null) {
+            return false;
+        }
+
+        return $profile->isComplete($user->cvAsset);
+    }
+
     private function mailboxReady(Application $application): bool
     {
-        return MailboxIdentity::query()
+        /** @var MailboxIdentity|null $mailbox */
+        $mailbox = MailboxIdentity::query()
             ->where('user_id', $application->user_id)
             ->where('state', MailboxState::Ready)
-            ->exists();
+            ->first();
+
+        if ($mailbox === null) {
+            return false;
+        }
+
+        return app(GmxAddressValidator::class)->isAllowed((string) $mailbox->address);
     }
 
     private function siteReady(Application $application): bool

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\DocArtifactKind;
 use App\Models\Application;
 use App\Models\ApplyAttempt;
+use App\Support\ModeBFailureCatalog;
 use Illuminate\Support\Collection;
 
 class BuildApplicationOpsItem
@@ -31,7 +32,7 @@ class BuildApplicationOpsItem
      *     hasCover: bool,
      *     companyApplyUrl: string|null,
      *     updatedAt: string|null,
-     *     attempts: list<array{kind: string|null, stopReason: string|null, createdAt: string|null}>
+     *     attempts: list<array{kind: string|null, stopReason: string|null, failureCode: string|null, failureLabel: string|null, createdAt: string|null}>
      * }
      */
     public function handle(Application $application): array
@@ -76,7 +77,7 @@ class BuildApplicationOpsItem
 
     /**
      * @param  Collection<int, ApplyAttempt>  $attempts
-     * @return list<array{kind: string|null, stopReason: string|null, createdAt: string|null}>
+     * @return list<array{kind: string|null, stopReason: string|null, failureCode: string|null, failureLabel: string|null, createdAt: string|null}>
      */
     private function attemptsPayload(Collection $attempts): array
     {
@@ -84,11 +85,22 @@ class BuildApplicationOpsItem
             ->sortByDesc(static fn (ApplyAttempt $attempt): int => (int) $attempt->id)
             ->take(self::ATTEMPTS_CAP)
             ->values()
-            ->map(static fn (ApplyAttempt $attempt): array => [
-                'kind' => $attempt->kind?->value,
-                'stopReason' => $attempt->stop_reason,
-                'createdAt' => $attempt->created_at?->toISOString(),
-            ])
+            ->map(static function (ApplyAttempt $attempt): array {
+                $mapped = ModeBFailureCatalog::resolve($attempt->stop_reason, $attempt->kind);
+
+                return [
+                    'kind' => $attempt->kind?->value,
+                    'stopReason' => $attempt->stop_reason,
+                    // Plan 31 — Staff-readable failure map (EN default for ops JSON).
+                    'failureCode' => $attempt->stop_reason !== null && $attempt->stop_reason !== ''
+                        ? $mapped['code']
+                        : ($attempt->kind?->value),
+                    'failureLabel' => $attempt->stop_reason !== null && $attempt->stop_reason !== ''
+                        ? $mapped['labelEn']
+                        : ($attempt->kind !== null ? $mapped['labelEn'] : null),
+                    'createdAt' => $attempt->created_at?->toISOString(),
+                ];
+            })
             ->all();
     }
 }

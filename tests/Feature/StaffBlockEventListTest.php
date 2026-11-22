@@ -74,9 +74,11 @@ class StaffBlockEventListTest extends TestCase
             ->assertJsonPath('alerts.0.siteId', 'azubiyo')
             ->assertJsonPath('alerts.0.siteIdentityId', $identity->id)
             ->assertJsonPath('alerts.0.kind', 'captcha')
+            ->assertJsonPath('alerts.0.failureCode', 'captcha')
+            ->assertJsonPath('alerts.0.failureLabel', 'Captcha blocked the apply — Staff must finish')
             ->assertJsonPath('alerts.0.open', true)
             ->assertJsonPath('alerts.0.needsHelp', true)
-            ->assertJsonStructure(['alerts' => [['createdAt', 'needsHelpMessage', 'companyApplyUrl']]]);
+            ->assertJsonStructure(['alerts' => [['createdAt', 'needsHelpMessage', 'companyApplyUrl', 'failureLabel']]]);
     }
 
     public function test_opens_false_returns_closed_alerts(): void

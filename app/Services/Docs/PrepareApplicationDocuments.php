@@ -377,6 +377,7 @@ class PrepareApplicationDocuments
 
         foreach ($artifacts as $artifact) {
             Storage::disk($artifact->disk)->delete($artifact->path);
+            Storage::disk($artifact->disk)->delete($artifact->path.'.txt');
             $artifact->delete();
         }
     }

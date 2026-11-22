@@ -38,10 +38,16 @@ class StoreDocArtifact
 
         if ($existing !== null) {
             Storage::disk($existing->disk)->delete($existing->path);
+            Storage::disk($existing->disk)->delete($existing->path.'.txt');
             $existing->delete();
         }
 
         Storage::disk($disk)->put($path, $pdfBytes);
+
+        // Sidecar plain text for Mode B Anschreiben textarea fill (cover only).
+        if ($kind === DocArtifactKind::Cover && $llm !== null && trim($llm->text) !== '') {
+            Storage::disk($disk)->put($path.'.txt', $llm->text);
+        }
 
         $usage = $llm?->usage;
 

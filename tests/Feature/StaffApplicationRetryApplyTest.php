@@ -219,6 +219,12 @@ class StaffApplicationRetryApplyTest extends TestCase
 
         /** @var Profile $profile */
         $profile = $applicant->ensureProfile();
+        $profile->fill([
+            'industry' => ['IT'],
+            'language' => 'de',
+            'education' => 'Abitur',
+            'desired_path' => 'ausbildung',
+        ]);
         if ($approved) {
             $profile->approval = ApprovalStatus::Approved;
             $profile->approved_by = $approver->id;

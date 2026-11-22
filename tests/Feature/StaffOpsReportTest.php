@@ -6,6 +6,7 @@ use App\Enums\ApplicationStatus;
 use App\Enums\ApplyAttemptKind;
 use App\Models\Application;
 use App\Models\ApplyAttempt;
+use App\Models\BlockEvent;
 use App\Models\DocArtifact;
 use App\Models\IntakeRun;
 use App\Models\IntakeRunSite;
@@ -72,6 +73,23 @@ class StaffOpsReportTest extends TestCase
             'application_id' => $failing->id,
             'kind' => ApplyAttemptKind::Retryable,
         ]);
+        ApplyAttempt::factory()->create([
+            'application_id' => $failing->id,
+            'kind' => ApplyAttemptKind::Success,
+        ]);
+        ApplyAttempt::factory()->create([
+            'application_id' => $failing->id,
+            'kind' => ApplyAttemptKind::Challenge,
+            'stop_reason' => 'captcha',
+        ]);
+
+        BlockEvent::factory()->create([
+            'user_id' => $candidate->id,
+            'site' => 'azubiyo',
+            'application_id' => $failing->id,
+            'observed_kind' => BlockEvent::KIND_CAPTCHA,
+            'resolved_at' => null,
+        ]);
 
         SiteIdentity::factory()->for($candidate)->paused()->create(['site' => 'azubiyo']);
         SiteIdentity::factory()->for($other)->paused()->create(['site' => 'azubiyo']);
@@ -90,12 +108,19 @@ class StaffOpsReportTest extends TestCase
             ->assertJsonPath('queue.hardFailAttempts', 1)
             ->assertJsonPath('queue.retryableAttempts', 1)
             ->assertJsonPath('blocks.openPauseCount', 2)
+            ->assertJsonPath('blocks.openBlockEventCount', 1)
+            ->assertJsonPath('blocks.staffHelpCount', 1)
+            ->assertJsonPath('applyOutcomes.successAttempts', 1)
+            ->assertJsonPath('applyOutcomes.challengeAttempts', 1)
+            ->assertJsonPath('applyOutcomes.successRate', 0.25)
+            ->assertJsonPath('applyOutcomes.challengeRate', 0.25)
             ->assertJsonPath('docCostUnits', 350)
             ->assertJsonStructure([
                 'generatedAt',
                 'intake' => [['siteId', 'lastRunAt', 'newListingCount', 'errorCount']],
                 'queue' => ['queued', 'applying', 'submitted', 'hardFailAttempts', 'retryableAttempts'],
-                'blocks' => ['openPauseCount', 'pausesBySite', 'pausedApplicantIds'],
+                'blocks' => ['openPauseCount', 'openBlockEventCount', 'staffHelpCount', 'pausesBySite', 'pausedApplicantIds', 'challengesByKind'],
+                'applyOutcomes' => ['successAttempts', 'challengeAttempts', 'hardFailAttempts', 'retryableAttempts', 'successRate', 'challengeRate', 'staffHelpRate'],
                 'funnel' => [['status', 'count']],
                 'docCostUnits',
             ]);

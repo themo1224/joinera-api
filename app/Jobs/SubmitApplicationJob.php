@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Contracts\ModeBSubmitAfterDocsReady;
 use App\Enums\ApplyAttemptKind;
 use App\Models\Application;
+use App\Services\Apply\ApplySlotLimiter;
 use App\Services\AssertApplicationDocsReadyForModeB;
 use App\Services\ClaimApplyingApplication;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -51,6 +52,7 @@ class SubmitApplicationJob implements ShouldBeUnique, ShouldQueue
         ClaimApplyingApplication $claim,
         AssertApplicationDocsReadyForModeB $docsReady,
         ModeBSubmitAfterDocsReady $afterDocsReady,
+        ApplySlotLimiter $slotLimiter,
     ): void {
         $attempt = $claim->handle($this->applicationId);
         if ($attempt === null) {
@@ -74,6 +76,21 @@ class SubmitApplicationJob implements ShouldBeUnique, ShouldQueue
             $attempt->save();
 
             return;
+        }
+
+        // Plan 32 — anti-block slot before browser work (inactive layers when config null).
+        $slot = $slotLimiter->requestSlot((int) $application->user_id, (string) $application->site);
+        if (! $slot['allowed']) {
+            $attempt->kind = ApplyAttemptKind::HardFail;
+            $attempt->stop_reason = $slot['code'] ?? ApplySlotLimiter::DENY_CAP;
+            $attempt->save();
+
+            return;
+        }
+
+        if (is_int($slot['jitterSeconds']) && $slot['jitterSeconds'] > 0) {
+            $slotLimiter->assertJitterInBand($slot['jitterSeconds']);
+            sleep($slot['jitterSeconds']);
         }
 
         $afterDocsReady->handle($application, $attempt);

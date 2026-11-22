@@ -42,7 +42,7 @@ Landing stays marketing; Admin panel is Staff/Admin only (no Candidate panel). M
 | Match | Rules filter (hard bans) → AI rank inside eligible → `proposed`; Staff Queue selected / force-queue |
 | Apply Queue | Mode B; statuses include `preparing_docs`; caps (Q17); idempotency; pause on blocks |
 | Doc | PDF gen + cost metadata (Q20 modes); runs while status `preparing_docs` |
-| Apply Worker | **Company-site Mode B:** Playwright opens listing company apply URL → generic form-discover → AI maps Candidate+docs → fill/upload/submit. No board Easy-Apply primary path. No per-employer adapters. |
+| Apply Worker | **Company-site Mode B:** Playwright opens listing company apply URL → generic form-discover → AI maps Candidate+docs → fill/upload/submit. **Must** attach CV + per-apply cover whenever those slots exist (never skip as “optional”); attach passport/language/education when slots match; Ready GMX apply email only. Empty CV/cover upload on a present slot = hard fail. No board Easy-Apply primary path. No per-employer adapters. |
 | Inbox/Sync | GMX IMAP sync stores messages in DB; Staff/Admin read/reply via GMX SMTP. Candidates cannot. |
 | Ops / Reporting / Notify | Plan B, metrics, alerts; soft-match signals visible in Admin (no auto-ban until PM) |
 | Billing | Not in the product. No price, payment, or “free” copy. |

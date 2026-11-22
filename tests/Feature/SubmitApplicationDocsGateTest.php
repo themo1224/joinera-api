@@ -134,6 +134,12 @@ class SubmitApplicationDocsGateTest extends TestCase
 
         /** @var Profile $profile */
         $profile = $applicant->ensureProfile();
+        $profile->fill([
+            'industry' => ['IT'],
+            'language' => 'de',
+            'education' => 'Mittlere Reife',
+            'desired_path' => 'ausbildung',
+        ]);
         $profile->approval = ApprovalStatus::Approved;
         $profile->approved_by = $approver->id;
         $profile->approved_at = now();

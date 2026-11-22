@@ -4,11 +4,13 @@ namespace Tests\Feature;
 
 use App\Enums\ApplicationStatus;
 use App\Enums\DocArtifactKind;
+use App\Enums\DocumentAssetKind;
 use App\Models\Application;
 use App\Models\DocArtifact;
 use App\Models\Listing;
 use App\Models\MailboxIdentity;
 use App\Models\Profile;
+use App\Models\ProfileDocumentAsset;
 use App\Models\SiteIdentity;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -66,11 +68,21 @@ class InternalModeBContextTest extends TestCase
 
         $this->assertIsString($response->json('artifacts.cv.url'));
         $this->assertIsString($response->json('artifacts.cover.url'));
+        $this->assertIsString($response->json('artifacts.passport.url'));
+        $this->assertIsString($response->json('artifacts.language_cert.url'));
+        $this->assertIsString($response->json('artifacts.education_cert.url'));
+        $this->assertSame(
+            'Sehr geehrte Damen und Herren — Anschreiben für diese Stelle.',
+            $response->json('candidate.cover_letter'),
+        );
         $this->assertIsArray($response->json('candidate.skills'));
         $this->assertSame(['Deutsch'], $response->json('candidate.languages'));
         $this->assertArrayNotHasKey('password', $response->json('candidate'));
+        $this->assertArrayNotHasKey('email', $response->json('candidate'));
+        $this->assertNotSame('ada.login@example.test', $response->json('candidate.apply_email'));
         $json = $response->json();
         $this->assertStringNotContainsString('secret-mailbox-password', json_encode($json) ?: '');
+        $this->assertStringNotContainsString('ada.login@example.test', json_encode($json) ?: '');
 
         $this->withHeader('X-Mode-B-Worker-Secret', 'worker-secret')
             ->get('/api/v1/internal/mode-b/applications/'.$application->id.'/artifacts/cv')
@@ -78,6 +90,10 @@ class InternalModeBContextTest extends TestCase
 
         $this->withHeader('X-Mode-B-Worker-Secret', 'worker-secret')
             ->get('/api/v1/internal/mode-b/applications/'.$application->id.'/artifacts/cover')
+            ->assertOk();
+
+        $this->withHeader('X-Mode-B-Worker-Secret', 'worker-secret')
+            ->get('/api/v1/internal/mode-b/applications/'.$application->id.'/artifacts/passport')
             ->assertOk();
     }
 
@@ -111,15 +127,23 @@ class InternalModeBContextTest extends TestCase
             ->assertJsonPath('candidate.languages', [])
             ->assertJsonPath('artifacts.cv', null)
             ->assertJsonPath('artifacts.cover', null)
+            ->assertJsonPath('artifacts.passport', null)
+            ->assertJsonPath('artifacts.language_cert', null)
+            ->assertJsonPath('artifacts.education_cert', null)
+            ->assertJsonPath('candidate.cover_letter', null)
             ->assertJsonPath('apply_url', 'https://karriere.firma.example.test/apply')
             ->assertJsonPath('apply_target', 'company');
     }
 
     private function makeApplicationWithArtifacts(): Application
     {
-        $user = User::factory()->create(['name' => 'Ada Candidate']);
+        $user = User::factory()->create([
+            'name' => 'Ada Candidate',
+            'email' => 'ada.login@example.test',
+        ]);
 
         Profile::factory()->for($user)->create([
+            'industry' => ['Healthcare'],
             'city' => ['Berlin'],
             'province' => ['BE'],
             'language' => 'de',
@@ -177,6 +201,30 @@ class InternalModeBContextTest extends TestCase
                 'path' => $path,
                 'mime' => 'application/pdf',
                 'size' => 24,
+            ]);
+        }
+
+        Storage::disk('local')->put(
+            'docs/'.$application->id.'/cover.pdf.txt',
+            'Sehr geehrte Damen und Herren — Anschreiben für diese Stelle.',
+        );
+
+        $profileDocs = [
+            [DocumentAssetKind::Passport, 'passport.pdf'],
+            [DocumentAssetKind::LanguageCert, 'language.pdf'],
+            [DocumentAssetKind::EducationCert, 'education.pdf'],
+        ];
+        foreach ($profileDocs as [$kind, $name]) {
+            $path = 'profile-docs/'.$user->id.'/'.$kind->value.'.pdf';
+            Storage::disk('local')->put($path, "%PDF-1.4\n%".$kind->value."\n%%EOF\n");
+            ProfileDocumentAsset::query()->create([
+                'user_id' => $user->id,
+                'kind' => $kind,
+                'disk' => 'local',
+                'path' => $path,
+                'original_name' => $name,
+                'mime' => 'application/pdf',
+                'size' => 32,
             ]);
         }
 

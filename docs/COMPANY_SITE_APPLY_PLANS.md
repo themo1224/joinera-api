@@ -14,8 +14,8 @@
 | # | Plan name | Short description |
 | --- | --- | --- |
 | 1 | Company link first | Every job remembers the company’s own apply page. **Done (2026-11-18):** intake prefers off-board `apply_url`; Upsert upgrades on re-see. |
-| 2 | Candidate pack ready | Profile, CV, and cover letter travel with each apply. **Done (2026-11-18):** Mode B context includes `candidate` pack + existing CV/cover artifacts. |
-| 3 | Stop board apply | We no longer treat board “easy apply” as the main path. **Done (2026-11-19):** claim rejects board-only URLs (`missing_company_apply_url`); no longer requires board `SiteIdentity`; worker board adapters need `ALLOW_BOARD_APPLY=1`. |
+| 2 | Candidate pack ready | Profile, CV, and cover letter travel with each apply. **Done (2026-11-18 / hardened 2026-11-22):** Mode B context includes `candidate` pack + CV/cover artifacts; `apply_email` is Ready GMX mailbox only (never personal `User.email`). |
+| 3 | Stop board apply | We no longer treat board “easy apply” as the main path. **Done (2026-11-19 / hardened 2026-11-22):** claim requires approved + complete profile + Ready allowed-GMX mailbox; rejects board-only URLs (`missing_company_apply_url`); worker board adapters need `ALLOW_BOARD_APPLY=1`. |
 | 4 | Open company door | The apply bot starts on the company page, every time. **Done (2026-11-19):** `runCompanySiteApply` `goto(apply_url)` with no board login; context exposes `apply_target`. |
 
 ---
@@ -82,22 +82,23 @@
 
 | # | Plan name | Short description |
 | --- | --- | --- |
-| 30 | Real-site practice | We test against common German company career systems. |
-| 31 | Failure map | Every fail gets a clear reason Staff can understand. |
-| 32 | Speed & limits | Applies stay paced so we do not look like spam bots. |
-| 33 | Watch the numbers | Success, block, and Staff-help rates are visible. |
-| 34 | Staging soak | Run many real-shaped applies before full go-live. |
-| 35 | Go-live checklist | Short launch list: what must be green before production. |
+| 30 | Real-site practice | We test against common German company career systems. **Done (2026-11-21):** ATS-shaped fixtures (Personio/Softgarden/Recruitee/onlyfy) + catalog + `test:company-site-ats`; live inspect probe opt-in. |
+| 31 | Failure map | Every fail gets a clear reason Staff can understand. **Done (2026-11-21):** `ModeBFailureCatalog` → ops `failureCode`/`failureLabel` on attempts + blocks; Admin shows labels. |
+| 32 | Speed & limits | Applies stay paced so we do not look like spam bots. **Done (2026-11-21):** `ApplySlotLimiter` (jitter/hour/cooldown, null=off) + `GET /apply-limits` + worker `humanDelay` pacing. |
+| 33 | Watch the numbers | Success, block, and Staff-help rates are visible. **Done (2026-11-21):** ops `applyOutcomes` + open BlockEvent/Staff-help counts on Reports + Overview. |
+| 34 | Staging soak | Run many real-shaped applies before full go-live. **Done (2026-11-21):** `test:company-site-soak` + `docs/COMPANY_SITE_STAGING_SOAK.md`. |
+| 35 | Go-live checklist | Short launch list: what must be green before production. **Done (2026-11-21):** `docs/COMPANY_SITE_GO_LIVE.md` + `php artisan joinera:company-site-go-live-check`. |
 
 ---
 
 ## Plan notes (3–29)
 
 ### 3 — Stop board apply
-- **Claim:** approved profile + ready GMX + **company** `apply_url`. Board `SiteIdentity` is not required.
+- **Claim:** approved + **complete** profile + Ready **allowed-GMX** mailbox + **company** `apply_url`. Board `SiteIdentity` is not required.
+- **GMX-only apply email:** automation uses `MailboxIdentity.address` (`gmx.de` / `gmx.net`) — never personal login email. Missing/invalid GMX → `mailbox_not_ready`; incomplete profile → `profile_incomplete`.
 - **Legacy opt-in:** `JOINERA_MODE_B_ALLOW_BOARD_APPLY` / worker `ALLOW_BOARD_APPLY=1` for board love-path probes only.
-- **Worker:** default route is company-site; board adapters stay behind the allow flag.
-- **Evidence:** `ClaimApplyingApplication`, `SubmitApplicationClaimTest`, `board-hosts.js`, `submit.js`.
+- **Worker:** default route is company-site; board adapters stay behind the allow flag; email fill rejects non-GMX hosts.
+- **Evidence:** `ClaimApplyingApplication`, `ModeBCandidatePack`, `SubmitApplicationClaimTest`, `ModeBCandidatePackTest`, `board-hosts.js`, `submit.js`, `form-match.js`.
 
 ### 4 — Open company door
 - Context includes `apply_target` (`company` \| `board` \| `missing`).
@@ -119,9 +120,10 @@
 - **Evidence:** `spotUploads`, `npm run test:form-inspect` + `test:company-site-mock`.
 
 ### 8 — Match our answers
-- Maps fields to candidate pack (name split, email, city, about, …) and artifacts (CV/cover).
+- Maps fields to candidate pack (name split, **GMX** `apply_email`, city, about, …) and artifacts (CV/cover).
 - Privacy/consent checkboxes map to an explicit `consent` answer (not invented profile data).
-- **Evidence:** `form-match.js` `matchAnswers`, `npm run test:form-match`.
+- Non-GMX `apply_email` values are ignored (treated as missing) so personal domains never fill email fields.
+- **Evidence:** `form-match.js` `matchAnswers` / `gmxApplyEmail`, `npm run test:form-match`.
 
 ### 9 — Flag missing info
 - Required fields without a real mapping → `missing` (never invent phone/other uploads).
@@ -252,6 +254,47 @@
 - Hard / challenge: persist attempt and return (no throw) so the job does not loop.
 - Staff retry: company-site applies work without board `SiteIdentity`; clears open `BlockEvent`s and unpauses identity when present.
 - **Evidence:** `SubmitApplicationJob`, `RetryApplyApplication`, `ResolveOpenBlockEvents`, `StaffApplicationRetryApplyTest`.
+
+---
+
+## Plan notes (30–35)
+
+### 30 — Real-site practice
+- Catalog: `browser-worker/fixtures/real-sites-catalog.json` labels common DE ATS shapes (Personio, Softgarden, Recruitee, onlyfy/XING).
+- CI-safe fixtures under `fixtures/mock-company-site/ats-*-like.html` — still generic form discover (no per-employer adapter).
+- Matcher accepts camelCase ATS ids (`givenName`, `familyName`, `firstName`).
+- Live rows are inspect-only; set `apply_url` + `COMPANY_SITE_LIVE=1` (never auto-submit).
+- **Evidence:** `run-company-site-ats-fixtures.js`, `run-company-site-live-probe.js`, `npm run test:company-site-ats`, `npm run probe:company-site-live`.
+
+### 31 — Failure map
+- Canonical map: `ModeBFailureCatalog` (EN/DE labels, severity, needsHelp) for worker `stop_reason` / block kinds.
+- Ops payloads: `failureCode` + `failureLabel` on application attempts and block alerts (raw `stopReason`/`kind` kept).
+- Admin Queue detail + Blocks kind column show the Staff label.
+- **Evidence:** `ModeBFailureCatalog`, `BuildApplicationOpsItem`, `BuildBlockAlertOpsItem`, `ModeBFailureCatalogTest`, `StaffApplicationShowTest`, `StaffBlockEventListTest`.
+
+### 32 — Speed & limits
+- Laravel `ApplySlotLimiter`: optional jitter band, per-user×site hourly cap, cooldown after open `BlockEvent` (all null = inactive).
+- `SubmitApplicationJob` requests a slot before browser work; denial → hard_fail `cap_reached` / `site_cooldown`.
+- Candidate `GET /api/v1/apply-limits?site=…` (other users 404).
+- Worker `pacing.js` `humanDelay` between fill and Next/Submit when `MODE_B_PACING_*_MS` set (skipped for mocks).
+- **Evidence:** `ApplySlotLimiter`, `ApplyLimitsController`, `pacing.js`, `ApplySlotLimiterTest`, `npm run test:pacing`.
+
+### 33 — Watch the numbers
+- Ops report adds `applyOutcomes` (success/challenge/hard_fail/retryable counts + rates) and block Staff-help counts.
+- `blocks.openBlockEventCount` / `staffHelpCount` / `challengesByKind` (company-site open pauses without SiteIdentity).
+- Admin Reports KPI strip + Overview attention strip show success %, challenge %, needs-help.
+- **Evidence:** `BuildOpsReport`, `StaffOpsReportTest`, admin `reports-kpi-strip` / `attention-strip`.
+
+### 34 — Staging soak
+- Random-order multi-round fixture battery (success ATS shapes + challenge walls).
+- Pass bar: all challenge expectations met + success rate ≥ `COMPANY_SITE_SOAK_MIN_SUCCESS_RATE` (default 0.7).
+- Runbook: `docs/COMPANY_SITE_STAGING_SOAK.md` (mirrored under `api/docs/`).
+- **Evidence:** `run-company-site-soak.js`, `npm run test:company-site-soak`.
+
+### 35 — Go-live checklist
+- Human checklist: `docs/COMPANY_SITE_GO_LIVE.md` (worker tests, API Mode B, secrets, Staff path, soak).
+- Config gate: `php artisan joinera:company-site-go-live-check` (driver=http, worker URL/secret, board apply off).
+- **Evidence:** `CompanySiteGoLiveCheckCommand`, go-live + soak docs.
 
 ---
 

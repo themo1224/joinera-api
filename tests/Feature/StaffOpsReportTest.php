@@ -103,6 +103,7 @@ class StaffOpsReportTest extends TestCase
             ->getJson('/api/v1/ops/reports')
             ->assertOk()
             ->assertJsonPath('queue.queued', 1)
+            ->assertJsonPath('queue.preparingDocs', 1)
             ->assertJsonPath('queue.applying', 2)
             ->assertJsonPath('queue.submitted', 1)
             ->assertJsonPath('queue.hardFailAttempts', 1)
@@ -118,7 +119,7 @@ class StaffOpsReportTest extends TestCase
             ->assertJsonStructure([
                 'generatedAt',
                 'intake' => [['siteId', 'lastRunAt', 'newListingCount', 'errorCount']],
-                'queue' => ['queued', 'applying', 'submitted', 'hardFailAttempts', 'retryableAttempts'],
+                'queue' => ['queued', 'preparingDocs', 'applying', 'submitted', 'hardFailAttempts', 'retryableAttempts'],
                 'blocks' => ['openPauseCount', 'openBlockEventCount', 'staffHelpCount', 'pausesBySite', 'pausedApplicantIds', 'challengesByKind'],
                 'applyOutcomes' => ['successAttempts', 'challengeAttempts', 'hardFailAttempts', 'retryableAttempts', 'successRate', 'challengeRate', 'staffHelpRate'],
                 'funnel' => [['status', 'count']],

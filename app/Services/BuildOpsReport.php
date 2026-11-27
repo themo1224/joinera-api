@@ -108,7 +108,7 @@ class BuildOpsReport
     }
 
     /**
-     * @return array{queued: int, applying: int, submitted: int, hardFailAttempts: int, retryableAttempts: int}
+     * @return array{queued: int, preparingDocs: int, applying: int, submitted: int, hardFailAttempts: int, retryableAttempts: int}
      */
     private function queue(): array
     {
@@ -132,6 +132,7 @@ class BuildOpsReport
 
         return [
             'queued' => (int) ($statusCounts[ApplicationStatus::Queued->value] ?? 0),
+            'preparingDocs' => (int) ($statusCounts[ApplicationStatus::PreparingDocs->value] ?? 0),
             'applying' => (int) ($statusCounts[ApplicationStatus::Applying->value] ?? 0),
             'submitted' => (int) ($statusCounts[ApplicationStatus::Submitted->value] ?? 0),
             'hardFailAttempts' => (int) ($attemptCounts[ApplyAttemptKind::HardFail->value] ?? 0),

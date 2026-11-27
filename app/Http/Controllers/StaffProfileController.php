@@ -6,6 +6,7 @@ use App\Enums\ApprovalStatus;
 use App\Enums\DocumentAssetKind;
 use App\Enums\Role;
 use App\Events\CandidateMatchRecomputeRequested;
+use App\Exceptions\AiUnavailableException;
 use App\Exceptions\CvMissingException;
 use App\Exceptions\CvUnreadableException;
 use App\Exceptions\DocumentTooLargeForAiException;
@@ -179,6 +180,11 @@ class StaffProfileController extends Controller
 
         try {
             $analyzed = $this->analyzeApplicantDocumentsWithAi->handle($user);
+        } catch (AiUnavailableException $e) {
+            return response()->json([
+                'code' => $e->errorCode,
+                'message' => $e->getMessage(),
+            ], 503);
         } catch (DocumentsIncompleteException $e) {
             return response()->json([
                 'code' => 'documents_incomplete',
@@ -190,6 +196,13 @@ class StaffProfileController extends Controller
                 'message' => $e->getMessage(),
             ], 422);
         } catch (LlmRequestException $e) {
+            if ($e->status === 402) {
+                return response()->json([
+                    'code' => AiUnavailableException::CODE_NO_CREDIT,
+                    'message' => 'No AI credit remaining.',
+                ], 503);
+            }
+
             return response()->json([
                 'code' => 'ai_analyze_failed',
                 'message' => $e->getMessage() !== ''

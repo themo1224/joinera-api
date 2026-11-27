@@ -15,11 +15,19 @@ return new class extends Migration
             $this->backfillColumn($column);
         }
 
-        Schema::table('profiles', function (Blueprint $table): void {
-            $table->json('industry')->nullable()->change();
-            $table->json('city')->nullable()->change();
-            $table->json('province')->nullable()->change();
-        });
+        if (Schema::getConnection()->getDriverName() === 'pgsql') {
+            foreach (self::COLUMNS as $column) {
+                DB::statement("ALTER TABLE profiles ALTER COLUMN {$column} DROP DEFAULT");
+                DB::statement("ALTER TABLE profiles ALTER COLUMN {$column} TYPE json USING CASE WHEN {$column} IS NULL OR btrim({$column}::text) = '' THEN '[]'::json ELSE {$column}::json END");
+                DB::statement("ALTER TABLE profiles ALTER COLUMN {$column} DROP NOT NULL");
+            }
+        } else {
+            Schema::table('profiles', function (Blueprint $table): void {
+                $table->json('industry')->nullable()->change();
+                $table->json('city')->nullable()->change();
+                $table->json('province')->nullable()->change();
+            });
+        }
     }
 
     public function down(): void

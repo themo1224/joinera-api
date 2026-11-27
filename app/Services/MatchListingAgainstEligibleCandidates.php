@@ -40,9 +40,10 @@ class MatchListingAgainstEligibleCandidates
         return User::query()
             ->where('role', Role::User)
             ->whereHas('profile', function ($query): void {
+                // industry is JSON; Postgres rejects `industry != '[]'` (json <> unknown).
                 $query->where('approval', ApprovalStatus::Approved)
                     ->whereNotNull('industry')
-                    ->where('industry', '!=', '[]')
+                    ->whereJsonLength('industry', '>', 0)
                     ->whereNotNull('language')
                     ->where('language', '!=', '')
                     ->whereNotNull('education')

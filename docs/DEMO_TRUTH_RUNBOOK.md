@@ -8,15 +8,31 @@
 
 ---
 
+## Local ports (Windows reserved-range note)
+
+On this machine, Hyper-V often blocks **3306** and **8000**. Use:
+
+| Service | Command | URL |
+| --- | --- | --- |
+| MySQL (Laragon) | `mysqld` with `--port=33060` | `127.0.0.1:33060` |
+| API | `php artisan serve --host=127.0.0.1 --port=8080` | http://127.0.0.1:8080 |
+| Queue | `php artisan queue:work database --queue=intake,match,docs,apply,alerts,default` | — |
+| Admin | `bun run dev -- --host 127.0.0.1 --port 3000` | http://127.0.0.1:3000 |
+
+Match `api/.env` `DB_PORT` / `APP_URL` and `admin/.env.local` `JOINERA_API_URL` to those ports. Seed demo personas once: `php artisan db:seed --class=ApplyDemoSeeder`.
+
+---
+
 ## Preflight (before audience enters)
 
-1. API running; Admin `JOINERA_API_URL` set; mailbox mode allows Admin attach (`JOINERA_MAILBOX_MODE=gmx_manual` or equivalent per SEAM).
+1. API `/up` returns 200; Admin `JOINERA_API_URL` points at the API; mailbox mode allows Admin attach (`JOINERA_MAILBOX_MODE=gmx_manual`).
 2. Sign in once as Admin: `admin@joinera.test` / `password`. Confirm session holds.
-3. Pick **one** Candidate path:
+3. Confirm Overview KPIs are non-empty (ApplyDemoSeeder or live data).
+4. Pick **one** Candidate path for mailbox:
    - Prefer an existing Candidate with mailbox already `ready` if you will open threads.
    - Or create + attach during the demo and **stop at status** if sync is flaky.
-4. Sidebar only: Operations + Governance from nav. Do not Cmd+K into starter routes.
-5. Keep the kill list (below) visible.
+5. Sidebar only: Operations + Governance from nav. Do not Cmd+K into starter routes.
+6. Keep the kill list (below) visible. Do not open the notification bell (template mock).
 
 **Stop conditions:** 5xx on applicants / profile / credentials → abort that step. Empty or suspicious mailbox threads after attach → close inbox, do not chase IMAP.
 
@@ -27,13 +43,19 @@
 | # | Action | Route / UI | API proof | One-line talk |
 | --- | --- | --- | --- | --- |
 | 1 | Sign in | Auth | `POST /api/v1/login`, `GET /api/v1/me` | Only Staff/Admin log in; Candidate has no panel (Q-Access). |
-| 2 | Open directory | `/dashboard/applicants` | `GET /api/v1/applicants` | Live Candidate directory. |
-| 3 | Create Candidate | Applicants → create | `POST /api/v1/applicants` | Name + optional ops email; no Candidate password. Docs arrive via WhatsApp; Staff uploads here. |
-| 4 | Edit profile + CV | Applicants `$id` | `PUT /api/v1/users/{user}/profile`, `POST …/profile/cv` | Structured fields + CV upload are live. |
-| 5 | Approve profile | Same | `POST …/profile/approvals` | One-time approval (Q7); then apply may start. |
-| 6 | Attach GMX | Detail / mailbox attach | `PUT …/mailbox/credentials` (Admin) | Admin creates GMX outside; paste email + password; password never shown again. |
-| 7 | Mailbox directory | `/dashboard/mailbox` | Applicants + `GET …/mailbox` meta | Dedicated apply inbox per Candidate. |
-| 8 | Inbox (optional) | `/dashboard/mailbox/$applicantId` | `GET/POST …/mailbox/messages*` | **Only** if status is `ready` and threads look real. Else skip. |
+| 2 | Overview | `/dashboard/overview` | `GET /api/v1/ops/reports` | Live attention strip: queued, applying, Staff help, pauses, hard fails. |
+| 3 | Open directory | `/dashboard/applicants` | `GET /api/v1/applicants` | Live Candidate directory. |
+| 4 | Create Candidate | Applicants → create | `POST /api/v1/applicants` | Name + optional ops email; no Candidate password. Docs arrive via WhatsApp; Staff uploads here. |
+| 5 | Edit profile + CV | Applicants `$id` | `PUT /api/v1/users/{user}/profile`, `POST …/profile/cv` | Structured fields + CV upload are live. |
+| 6 | Approve profile | Same | `POST …/profile/approvals` | One-time approval (Q7); then apply may start. |
+| 7 | Queue | `/dashboard/queue` | `GET /api/v1/applications` | Live pipeline rows + status counts; open a detail for docs. |
+| 8 | Queue detail / docs | Queue `$id` | `POST/GET …/applications/{id}/docs/*` | Generate/download when status allows. |
+| 9 | Reports (optional) | `/dashboard/reports` | `GET /api/v1/ops/reports` | Same live ops report, deeper intake + funnel. |
+| 10 | Attach GMX | Detail / mailbox attach | `PUT …/mailbox/credentials` (Admin) | Admin creates GMX outside; paste email + password; password never shown again. |
+| 11 | Mailbox directory | `/dashboard/mailbox` | Applicants + `GET …/mailbox` meta | Dedicated apply inbox per Candidate. |
+| 12 | Inbox (optional) | `/dashboard/mailbox/$applicantId` | `GET/POST …/mailbox/messages*` | **Only** if status is `ready` and threads look real. Else skip. |
+
+CEO apply-persona shortcut: [APPLY_CEO_DEMO_WALKTHROUGH.md](./APPLY_CEO_DEMO_WALKTHROUGH.md) (Overview → Queue → Blocks for seeded personas).
 
 ---
 
@@ -41,14 +63,14 @@
 
 | Item | Why |
 | --- | --- |
-| Overview (`/dashboard/overview`) | Mock ops reports |
-| Reports (`/dashboard/reports`) | Mock ops reports |
-| Queue (`/dashboard/queue`) | Mock pipeline UI; not wired to live matches |
-| Blocks (`/dashboard/blocks`) | Mock break-glass / anti-block |
-| Audit (`/dashboard/audit`) | Mock governance trail |
-| Staff (`/dashboard/staff`) | Mock operators UI; not Laravel `POST /api/v1/staff-users` |
+| Audit (`/dashboard/audit`) | Mock list — break-glass writes live audit ids that **won’t** appear here |
+| Queue **Mark submitted** / manual-complete | Mock — does not update the live pipeline |
+| Staff (`/dashboard/staff`) | Mock operators UI; create does not mint Laravel logins |
 | Document templates (`/dashboard/document-templates`) | Local studio; not apply PDF generate API |
+| `/about`, Terms, Privacy | Fine if asked; not the product story |
 | **Do not open:** `/dashboard/forms*`, `/product*`, `/kanban`, `/chat`, `/ai-chat`, `/notifications`, `/react-query`, `/elements/icons`, `/dashboard/users` | Starter junk; not in nav |
+
+**Blocks** (`/dashboard/blocks`) is **live** for list + break-glass — safe for the CEO walkthrough. Do not then open Audit expecting the same event.
 
 ---
 
@@ -56,10 +78,9 @@
 
 | Topic | Line |
 | --- | --- |
-| Auto match / queue / force-queue | Daily DE scrape + auto-queue is next. API has `GET /api/v1/matches` and force-queue; the Admin **queue screen is still mock**. |
-| Mode B apply | Product target (PRD 1.8): **company-site** AI form-discover + Playwright. Today’s worker still has **interim board** adapters (Azubiyo / BA); company-site path not shipped. Internal Mode B APIs exist; no Staff end-to-end apply console in nav yet. |
-| Per-apply CV/cover PDFs | Generate/download APIs exist under `applications/.../docs*`. Document-templates is **not** that pipeline. |
-| Board auto-register / verify | After **company-site** Mode B ships (PRD). Board login is not the primary apply gate. |
+| Auto match / scrape cadence | Daily DE scrape continues; force-queue from skipped matches is live on Queue. |
+| Mode B company-site apply | Product target (PRD 1.8): AI form-discover + Playwright. Worker + Mode B APIs exist; claim only what you can show end-to-end today. |
+| Board auto-register / verify | After company-site Mode B is the primary path. |
 | Candidate login / in-product pay | Explicit non-goals. Money outside the product. Do not call the service free. |
 
 ---
@@ -68,43 +89,39 @@
 
 1. Ops-only product (Staff/Admin).
 2. Candidate is a managed record: create → profile/CV → one-time approve.
-3. GMX apply identity is Admin-attached (Q8).
-4. Mailbox identity is visible; live threads only if stable.
-5. Match → queue → tailored PDFs → **company-site** Mode B → board register (optional later) → pay UI = roadmap.
+3. Live queue + ops reports show pipeline truth (seeded demo personas for the room).
+4. GMX apply identity is Admin-attached (Q8).
+5. Mailbox identity is visible; live threads only if stable.
+6. Mode B company-site apply + board register (optional later) + pay UI = roadmap unless you have a live proof today.
 
 ---
 
 ## Five lies never to imply
 
-1. **Queue** = production auto-apply pipeline.
-2. **Blocks** = live CAPTCHA/2FA break-glass.
-3. **Overview / Reports** = real ops metrics.
-4. **Audit** = authoritative production trail.
-5. **Mailbox threads** or **Staff operators** page = necessarily live (hybrid mock / mock accounts).
+1. **Blocks / Audit / Staff operators page** = necessarily production-backed UI (still mock in panel).
+2. **Notification bell** = live ops alerts.
+3. **Document templates** gallery = the per-apply PDF generate pipeline (that lives on application docs APIs).
+4. **Mailbox threads** = always live (hybrid mock fallback if message APIs unavailable).
+5. **Cmd+K starter routes** = product.
 
 ---
 
-## Phase 1 inventory (quick reference)
+## Phase inventory (quick reference)
 
-| Area | Admin route/nav | Live / Mock / Partial / Missing | API route(s) | Demo | Risk if opened by mistake |
-| --- | --- | --- | --- | --- | --- |
-| Sign-in | (auth) | Live | `login`, `logout`, `me` | Show | Low |
-| Overview | `/dashboard/overview` | Mock | — | Skip | Fake ops health |
-| Applicants | `/dashboard/applicants` | Live | `applicants*` | Show | Low if API up |
-| Profile / CV / approve | Applicants detail | Live | `users/{user}/profile*`, `…/cv`, `…/approvals` | Show | Low |
-| GMX attach | Detail / mailbox | Live | `PUT …/mailbox/credentials` | Show | Medium if mode wrong |
-| Mailbox directory | `/dashboard/mailbox` | Live | applicants + `…/mailbox` | Show | Low |
-| Mailbox messages | `…/mailbox/$id` | Partial | `…/mailbox/messages*` | Show only if ready | **High** — mock fallback |
-| Queue | `/dashboard/queue` | Mock | matches API unwired in UI | Say coming | **High** |
-| Blocks | `/dashboard/blocks` | Mock | — | Skip | **High** |
-| Reports | `/dashboard/reports` | Mock | — | Skip | **High** |
-| Document templates | `/dashboard/document-templates` | Partial (local) | docs APIs ≠ this page | Skip / coming | Medium |
-| Audit | `/dashboard/audit` | Mock | — | Skip | **High** |
-| Staff | `/dashboard/staff` | Mock | `POST staff-users` unused by UI | Skip | Medium |
-| Identity readiness | Applicants badges | Partial | `…/identity/readiness` | Soft show | Medium |
-| Site identities | no nav | Partial / Missing UI | `…/site-identities` | Say coming | Medium |
-| Matches / force-queue | no nav | Missing Admin UI | `matches*` | Say coming | — |
-| Application docs | no nav | Missing Admin UI | `applications/.../docs*` | Say coming | — |
-| Listing import | no nav | Missing UI (PRD non-goal) | `POST listings/import` | Skip | Contradicts scrape-only |
-| Mode B internal | no Admin UI | Partial API | `internal/mode-b/...` | Say coming | High if pitched as console |
-| Starter junk | forms/product/kanban/chat/ai-chat/notifications | Template | — | **Do not open** | **High** |
+| Area | Admin route/nav | Live / Mock / Partial | API route(s) | Demo |
+| --- | --- | --- | --- | --- |
+| Sign-in | (auth) | Live | `login`, `logout`, `me` | Show |
+| Overview | `/dashboard/overview` | Live | `ops/reports` | Show |
+| Applicants | `/dashboard/applicants` | Live | `applicants*` | Show |
+| Profile / CV / approve | Applicants detail | Live | `users/{user}/profile*`, `…/cv`, `…/approvals` | Show |
+| Queue | `/dashboard/queue` | Live | `applications*`, docs, skipped matches force-queue | Show |
+| Reports | `/dashboard/reports` | Live | `ops/reports` | Show |
+| GMX attach | Detail / mailbox | Live | `PUT …/mailbox/credentials` | Show |
+| Mailbox directory | `/dashboard/mailbox` | Live | applicants + `…/mailbox` | Show |
+| Mailbox messages | `…/mailbox/$id` | Partial | `…/mailbox/messages*` | Show only if ready |
+| Blocks | `/dashboard/blocks` | Live list + break-glass | `ops/blocks`, `…/break-glass` | Show (CEO walkthrough) |
+| Manual-complete | Queue detail | Mock | — | Skip |
+| Document templates | `/dashboard/document-templates` | Partial (local) | docs APIs ≠ this page | Skip / coming |
+| Audit | `/dashboard/audit` | Mock | — | Skip |
+| Staff | `/dashboard/staff` | Mock | `POST staff-users` unused by UI | Skip |
+| Starter junk | forms/product/kanban/chat/… | Template | — | **Do not open** |

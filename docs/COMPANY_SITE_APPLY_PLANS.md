@@ -170,7 +170,8 @@
 - One-page applies unchanged; 2-step mock proves the loop.
 - Stop if navigation missing (`step_nav_not_found`) or cap hit (`max_steps_exceeded`).
 - `form_plan.steps` audits each page (feeds Plan 18; does not replace it).
-- **Evidence:** `classifyStepAction` / `hitNext`, company-site step loop, `npm run test:form-fill` + `test:company-site-mock` (one-page + two-step).
+- **AI Step Navigator (P0):** fallback order testid → regex → widened `a.btn` heuristics → AI (Laravel `POST /api/v1/internal/mode-b/step-nav`) → `step_nav_not_found`. Default off (`MODE_B_AI_STEP_NAV` / `JOINERA_MODE_B_AI_STEP_NAV`). Records `form_plan.steps[].nav.{source,label}`.
+- **Evidence:** `resolveStepNav` / `hitNext`, company-site step loop, `npm run test:form-fill` + `test:company-site-mock` (one-page + two-step + avature/norma AI fixtures), `InternalModeBStepNavTest`.
 
 ### 18 — Keep context
 - Depends on Plan 17 step loop; feeds clearer `form_plan` into later Phase 4 stops.

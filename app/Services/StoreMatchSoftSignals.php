@@ -18,6 +18,9 @@ class StoreMatchSoftSignals
         $result = $this->evaluator->handle($profile, $listing);
 
         $match->soft_signals = $result['soft_signals'];
+        // Rules heuristic (no LLM): clean soft fit = 100; language mismatch = 50.
+        $match->rank_score = $result['has_soft_mismatch'] ? 50 : 100;
+        $match->ranked_at = now();
         $match->save();
 
         return $match->refresh();

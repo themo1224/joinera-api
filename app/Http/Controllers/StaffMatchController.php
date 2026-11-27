@@ -40,6 +40,9 @@ class StaffMatchController extends Controller
             ->where('status', $status)
             ->whereHas('user', fn ($q) => $q->where('role', Role::User))
             ->with(['user', 'listing', 'application', 'forceQueuedBy'])
+            // Null rank_score last, then higher score, then newer id (recency).
+            ->orderByRaw('case when rank_score is null then 1 else 0 end')
+            ->orderByDesc('rank_score')
             ->orderByDesc('id');
 
         $userId = null;

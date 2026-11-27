@@ -84,6 +84,14 @@ return [
         'apply' => env('JOINERA_QUEUE_APPLY', 'apply'),
     ],
 
+    'match' => [
+        // When true, RematchCandidateAgainstListings SQL-prefilters DE-compatible +
+        // industry-compatible listings (Proposed set preserved; Skipped for excluded
+        // hard-fail listings may not refresh). Default off for full-scan parity.
+        // Prod enable: human-approve listings.country index if EXPLAIN requires it.
+        'rematch_listing_prefilter' => (bool) env('JOINERA_REMATCH_LISTING_PREFILTER', false),
+    ],
+
     'apply' => [
         // Q17: Applications per Candidate per active window (not profile CVs).
         'cap' => max(1, (int) env('JOINERA_APPLY_CAP', 10)),

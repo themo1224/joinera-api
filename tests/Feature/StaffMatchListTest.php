@@ -90,6 +90,43 @@ class StaffMatchListTest extends TestCase
             ->assertJsonPath('matches.0.userId', $one->id);
     }
 
+    public function test_staff_lists_proposed_ordered_by_rank_score_then_id(): void
+    {
+        $staff = User::factory()->staff()->create();
+        $candidate = User::factory()->create();
+
+        $low = CandidateListingMatch::factory()
+            ->for($candidate)
+            ->proposed()
+            ->create(['rank_score' => 50, 'ranked_at' => now()]);
+        $highOlder = CandidateListingMatch::factory()
+            ->for($candidate)
+            ->proposed()
+            ->create(['rank_score' => 100, 'ranked_at' => now()]);
+        $highNewer = CandidateListingMatch::factory()
+            ->for($candidate)
+            ->proposed()
+            ->create(['rank_score' => 100, 'ranked_at' => now()]);
+        $unranked = CandidateListingMatch::factory()
+            ->for($candidate)
+            ->proposed()
+            ->create(['rank_score' => null, 'ranked_at' => null]);
+
+        $response = $this->actingAs($staff, 'sanctum')
+            ->getJson('/api/v1/matches?status=proposed&userId='.$candidate->id)
+            ->assertOk()
+            ->assertJsonPath('total', 4);
+
+        $ids = array_column($response->json('matches'), 'id');
+        $this->assertSame(
+            [$highNewer->id, $highOlder->id, $low->id, $unranked->id],
+            $ids,
+        );
+        $this->assertSame(100, $response->json('matches.0.rankScore'));
+        $this->assertSame(50, $response->json('matches.2.rankScore'));
+        $this->assertNull($response->json('matches.3.rankScore'));
+    }
+
     public function test_list_requires_valid_status(): void
     {
         $staff = User::factory()->staff()->create();

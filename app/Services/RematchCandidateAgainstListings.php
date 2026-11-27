@@ -7,9 +7,12 @@ use App\Models\User;
 
 class RematchCandidateAgainstListings
 {
+    public const CHUNK_SIZE = 500;
+
     public function __construct(
         private readonly ResolveCandidateEligibility $eligibility,
         private readonly UpsertCandidateListingMatch $upsertMatch,
+        private readonly BuildRematchListingQuery $listingQuery,
     ) {
     }
 
@@ -21,11 +24,15 @@ class RematchCandidateAgainstListings
             return;
         }
 
-        Listing::query()
-            ->orderBy('id')
-            ->cursor()
-            ->each(function (Listing $listing) use ($user): void {
-                $this->upsertMatch->handle($user, $listing);
+        $user->loadMissing('profile');
+
+        $this->listingQuery
+            ->handle($user->profile)
+            ->chunkById(self::CHUNK_SIZE, function ($listings) use ($user): void {
+                foreach ($listings as $listing) {
+                    /** @var Listing $listing */
+                    $this->upsertMatch->handle($user, $listing);
+                }
             });
     }
 }

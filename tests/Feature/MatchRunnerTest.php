@@ -240,6 +240,7 @@ class MatchRunnerTest extends TestCase
             'language_requirement' => null,
         ]);
 
+        config(['joinera.match.rematch_listing_prefilter' => false]);
         app(RematchCandidateAgainstListings::class)->handle($applicant);
 
         $this->assertSame(2, CandidateListingMatch::query()->count());
@@ -250,6 +251,80 @@ class MatchRunnerTest extends TestCase
         $this->assertSame(
             MatchStatus::Skipped,
             CandidateListingMatch::query()->where('listing_id', $skip->id)->value('status'),
+        );
+        $this->assertSame(
+            100,
+            CandidateListingMatch::query()->where('listing_id', $pass->id)->value('rank_score'),
+        );
+    }
+
+    public function test_rematch_prefilter_preserves_proposed_and_skips_excluded_hard_fails(): void
+    {
+        $staff = User::factory()->staff()->create();
+        $applicant = $this->createEligibleApplicant($staff);
+
+        $proposedDeIt = $this->createHardPassListing();
+        $proposedBlankCountry = Listing::factory()->create([
+            'category' => 'IT',
+            'country' => null,
+            'education_requirement' => null,
+            'city' => 'Berlin',
+            'language_requirement' => null,
+        ]);
+        $skippedIndustry = Listing::factory()->create([
+            'category' => 'Nursing',
+            'country' => 'DE',
+            'education_requirement' => null,
+            'city' => 'Berlin',
+            'language_requirement' => null,
+        ]);
+        $skippedCountry = Listing::factory()->create([
+            'category' => 'IT',
+            'country' => 'AT',
+            'education_requirement' => null,
+            'city' => 'Vienna',
+            'language_requirement' => null,
+        ]);
+
+        config(['joinera.match.rematch_listing_prefilter' => false]);
+        app(RematchCandidateAgainstListings::class)->handle($applicant);
+
+        $fullProposed = CandidateListingMatch::query()
+            ->where('status', MatchStatus::Proposed)
+            ->orderBy('listing_id')
+            ->pluck('listing_id')
+            ->all();
+        $this->assertSame(
+            [$proposedDeIt->id, $proposedBlankCountry->id],
+            $fullProposed,
+        );
+        $this->assertSame(4, CandidateListingMatch::query()->count());
+        $this->assertSame(
+            MatchStatus::Skipped,
+            CandidateListingMatch::query()->where('listing_id', $skippedIndustry->id)->value('status'),
+        );
+        $this->assertSame(
+            MatchHardSkipReason::NotGermany,
+            CandidateListingMatch::query()->where('listing_id', $skippedCountry->id)->value('hard_skip_reason'),
+        );
+
+        CandidateListingMatch::query()->delete();
+
+        config(['joinera.match.rematch_listing_prefilter' => true]);
+        app(RematchCandidateAgainstListings::class)->handle($applicant);
+
+        $filteredProposed = CandidateListingMatch::query()
+            ->where('status', MatchStatus::Proposed)
+            ->orderBy('listing_id')
+            ->pluck('listing_id')
+            ->all();
+        $this->assertSame($fullProposed, $filteredProposed);
+        $this->assertLessThan(4, CandidateListingMatch::query()->count());
+        $this->assertNull(
+            CandidateListingMatch::query()->where('listing_id', $skippedCountry->id)->first(),
+        );
+        $this->assertNull(
+            CandidateListingMatch::query()->where('listing_id', $skippedIndustry->id)->first(),
         );
     }
 

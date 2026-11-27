@@ -125,4 +125,34 @@ final class IndustryTaxonomy
 
         return $normalizedLower;
     }
+
+    /**
+     * Lowercase labels that belong to any of the given family keys (synonyms + key).
+     * Unknown family keys are included as themselves so SQL prefilters mirror familyKey().
+     *
+     * @param  list<string>  $familyKeys
+     * @return list<string>
+     */
+    public static function labelsForFamilyKeys(array $familyKeys): array
+    {
+        $labels = [];
+
+        foreach ($familyKeys as $familyKey) {
+            if (! is_string($familyKey) || $familyKey === '') {
+                continue;
+            }
+
+            if (isset(self::FAMILIES[$familyKey])) {
+                foreach (self::FAMILIES[$familyKey] as $synonym) {
+                    $labels[] = $synonym;
+                }
+
+                continue;
+            }
+
+            $labels[] = $familyKey;
+        }
+
+        return array_values(array_unique($labels));
+    }
 }

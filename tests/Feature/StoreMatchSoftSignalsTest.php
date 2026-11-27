@@ -46,6 +46,8 @@ class StoreMatchSoftSignalsTest extends TestCase
         $this->assertIsArray($stored->soft_signals);
         $this->assertSame('language_code_mismatch', $stored->soft_signals['language_level']['reason']);
         $this->assertArrayNotHasKey('location', $stored->soft_signals);
+        $this->assertSame(50, $stored->rank_score);
+        $this->assertNotNull($stored->ranked_at);
     }
 
     public function test_clean_pair_stores_null_soft_signals(): void
@@ -78,5 +80,7 @@ class StoreMatchSoftSignalsTest extends TestCase
         $this->assertSame(MatchStatus::Proposed, $stored->status);
         $this->assertNull($stored->hard_skip_reason);
         $this->assertNull($stored->soft_signals);
+        $this->assertSame(100, $stored->rank_score);
+        $this->assertNotNull($stored->ranked_at);
     }
 }

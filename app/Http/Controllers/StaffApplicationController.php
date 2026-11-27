@@ -6,14 +6,17 @@ use App\Enums\Role;
 use App\Http\Requests\ListApplicationsRequest;
 use App\Models\Application;
 use App\Services\BuildApplicationOpsItem;
+use App\Services\ManualCompleteApplication;
 use App\Services\RetryApplyApplication;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class StaffApplicationController extends Controller
 {
     public function __construct(
         private readonly BuildApplicationOpsItem $buildApplicationOpsItem,
         private readonly RetryApplyApplication $retryApplyApplication,
+        private readonly ManualCompleteApplication $manualCompleteApplication,
     ) {}
 
     public function index(ListApplicationsRequest $request): JsonResponse
@@ -127,5 +130,38 @@ class StaffApplicationController extends Controller
             'success' => true,
             'applicationId' => $application->id,
         ], 202);
+    }
+
+    public function manualComplete(Request $request, Application $application): JsonResponse
+    {
+        $application->loadMissing(['user']);
+
+        if ($application->user === null || $application->user->role !== Role::User) {
+            return response()->json([
+                'code' => 'not_found',
+                'message' => 'Not found.',
+            ], 404);
+        }
+
+        $result = $this->manualCompleteApplication->handle($application, $request->user());
+        if (! $result['ok']) {
+            $messages = [
+                'not_eligible' => 'Application is not eligible for manual complete.',
+                'not_found' => 'Not found.',
+            ];
+
+            $status = $result['code'] === 'not_found' ? 404 : 409;
+
+            return response()->json([
+                'code' => $result['code'],
+                'message' => $messages[$result['code']] ?? 'Manual complete is not allowed.',
+            ], $status);
+        }
+
+        return response()->json([
+            'success' => true,
+            'alreadySubmitted' => $result['alreadySubmitted'],
+            'application' => $this->buildApplicationOpsItem->handle($result['application']),
+        ]);
     }
 }

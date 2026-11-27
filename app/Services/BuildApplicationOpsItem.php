@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\DocArtifactKind;
 use App\Models\Application;
 use App\Models\ApplyAttempt;
+use App\Models\BlockEvent;
 use App\Support\ModeBFailureCatalog;
 use Illuminate\Support\Collection;
 
@@ -31,6 +32,10 @@ class BuildApplicationOpsItem
      *     hasCv: bool,
      *     hasCover: bool,
      *     companyApplyUrl: string|null,
+     *     blockPaused: bool,
+     *     lastAttemptKind: string|null,
+     *     manuallyCompletedAt: string|null,
+     *     manuallyCompletedById: int|null,
      *     updatedAt: string|null,
      *     attempts: list<array{kind: string|null, stopReason: string|null, failureCode: string|null, failureLabel: string|null, createdAt: string|null}>
      * }
@@ -44,6 +49,13 @@ class BuildApplicationOpsItem
         $match = $application->candidateListingMatch;
         $artifacts = $application->docArtifacts;
         $companyApplyUrl = $listing?->apply_url ?: $listing?->url;
+        $attempts = $this->attemptsPayload($application->applyAttempts);
+        $lastAttemptKind = $attempts[0]['kind'] ?? null;
+
+        $blockPaused = BlockEvent::query()
+            ->where('application_id', $application->id)
+            ->whereNull('resolved_at')
+            ->exists();
 
         return [
             'id' => $application->id,
@@ -70,8 +82,12 @@ class BuildApplicationOpsItem
             'companyApplyUrl' => is_string($companyApplyUrl) && $companyApplyUrl !== ''
                 ? $companyApplyUrl
                 : null,
+            'blockPaused' => $blockPaused,
+            'lastAttemptKind' => $lastAttemptKind,
+            'manuallyCompletedAt' => $application->manually_completed_at?->toISOString(),
+            'manuallyCompletedById' => $application->manually_completed_by,
             'updatedAt' => $application->updated_at?->toISOString(),
-            'attempts' => $this->attemptsPayload($application->applyAttempts),
+            'attempts' => $attempts,
         ];
     }
 

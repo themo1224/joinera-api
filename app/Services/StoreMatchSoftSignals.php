@@ -18,8 +18,13 @@ class StoreMatchSoftSignals
         $result = $this->evaluator->handle($profile, $listing);
 
         $match->soft_signals = $result['soft_signals'];
-        // Rules heuristic (no LLM): clean soft fit = 100; language mismatch = 50.
-        $match->rank_score = $result['has_soft_mismatch'] ? 50 : 100;
+        // Rules heuristic (no LLM): language mismatch = 50; otherwise 100.
+        // Location soft signals do not change rank_score in this slice.
+        $language = is_array($result['soft_signals']['language_level'] ?? null)
+            ? $result['soft_signals']['language_level']
+            : null;
+        $languageMismatch = is_array($language) && ($language['mismatch'] ?? false) === true;
+        $match->rank_score = $languageMismatch ? 50 : 100;
         $match->ranked_at = now();
         $match->save();
 

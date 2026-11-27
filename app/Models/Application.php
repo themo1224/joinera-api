@@ -26,6 +26,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'site',
     'status',
     'docs_failure_code',
+    'manually_completed_at',
+    'manually_completed_by',
 ])]
 class Application extends Model
 {
@@ -38,6 +40,14 @@ class Application extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function manuallyCompletedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'manually_completed_by');
     }
 
     /**
@@ -79,6 +89,7 @@ class Application extends Model
     {
         return [
             'status' => ApplicationStatus::class,
+            'manually_completed_at' => 'datetime',
         ];
     }
 }

@@ -45,9 +45,40 @@ class StoreMatchSoftSignalsTest extends TestCase
         $this->assertSame(MatchHardSkipReason::Industry, $stored->hard_skip_reason);
         $this->assertIsArray($stored->soft_signals);
         $this->assertSame('language_code_mismatch', $stored->soft_signals['language_level']['reason']);
-        $this->assertArrayNotHasKey('location', $stored->soft_signals);
+        $this->assertSame('city_mismatch', $stored->soft_signals['location']['reason'] ?? null);
         $this->assertSame(50, $stored->rank_score);
         $this->assertNotNull($stored->ranked_at);
+    }
+
+    public function test_location_mismatch_alone_does_not_lower_rank_score(): void
+    {
+        $user = User::factory()->create();
+        $profile = $user->ensureProfile();
+        $profile->fill([
+            'industry' => 'IT',
+            'city' => 'Munich',
+            'province' => 'BY',
+            'language' => 'de',
+        ])->save();
+
+        $listing = Listing::factory()->create([
+            'category' => 'IT',
+            'city' => '12435 Berlin',
+            'country' => 'DE',
+            'language_requirement' => 'B1 German',
+        ]);
+
+        $match = CandidateListingMatch::factory()
+            ->for($user)
+            ->for($listing)
+            ->proposed()
+            ->create();
+
+        $stored = app(StoreMatchSoftSignals::class)->handle($match, $profile->fresh(), $listing);
+
+        $this->assertSame('city_mismatch', $stored->soft_signals['location']['reason'] ?? null);
+        $this->assertArrayNotHasKey('language_level', $stored->soft_signals ?? []);
+        $this->assertSame(100, $stored->rank_score);
     }
 
     public function test_clean_pair_stores_null_soft_signals(): void

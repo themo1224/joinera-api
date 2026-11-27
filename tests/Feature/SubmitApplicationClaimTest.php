@@ -17,6 +17,7 @@ use App\Models\SiteIdentity;
 use App\Models\User;
 use App\Services\ClaimApplyingApplication;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
@@ -37,6 +38,11 @@ class SubmitApplicationClaimTest extends TestCase
 
         config([
             'joinera.queues.apply' => 'apply',
+        ]);
+
+        // Claim preflight probes company apply_url; keep non-404 tests offline.
+        Http::fake([
+            '*' => Http::response('ok', 200),
         ]);
     }
 
@@ -164,6 +170,26 @@ class SubmitApplicationClaimTest extends TestCase
         $this->assertSame(ApplicationStatus::Applying, $application->fresh()->status);
     }
 
+    public function test_dead_company_apply_url_writes_apply_url_not_found(): void
+    {
+        $this->mock(\App\Services\ProbeCompanyApplyUrl::class, function ($mock): void {
+            $mock->shouldReceive('isDead')->andReturn(true);
+        });
+
+        $application = $this->makeClaimableApplication(
+            applyUrl: 'https://jobs.lidl.example.test/jobs/dead-626137',
+            listingUrl: 'https://www.azubiyo.de/stellenanzeigen/lidl_dead/',
+            source: 'azubiyo',
+        );
+
+        $attempt = app(ClaimApplyingApplication::class)->handle($application->id);
+
+        $this->assertNotNull($attempt);
+        $this->assertSame(ApplyAttemptKind::HardFail, $attempt->kind);
+        $this->assertSame('apply_url_not_found', $attempt->stop_reason);
+        $this->assertSame(ApplicationStatus::Applying, $application->fresh()->status);
+    }
+
     public function test_paused_board_site_identity_does_not_block_company_claim(): void
     {
         $application = $this->makeClaimableApplication(sitePaused: true);
@@ -182,6 +208,40 @@ class SubmitApplicationClaimTest extends TestCase
         SubmitApplicationJob::dispatch($application->id);
 
         Queue::assertPushedOn('apply', SubmitApplicationJob::class);
+    }
+
+    public function test_failed_finalizes_open_attempt_as_retryable_worker_timeout(): void
+    {
+        $application = $this->makeClaimableApplication();
+        $attempt = app(ClaimApplyingApplication::class)->handle($application->id);
+        $this->assertNotNull($attempt);
+        $this->assertNull($attempt->kind);
+
+        $job = new SubmitApplicationJob($application->id);
+        $job->failed(new \RuntimeException(
+            'cURL error 28: Operation timed out after 120001 milliseconds with 0 bytes received'
+        ));
+
+        $attempt->refresh();
+        $this->assertSame(ApplyAttemptKind::Retryable, $attempt->kind);
+        $this->assertSame('worker_timeout', $attempt->stop_reason);
+    }
+
+    public function test_failed_noop_when_attempt_already_finalized(): void
+    {
+        $application = $this->makeClaimableApplication();
+        $attempt = app(ClaimApplyingApplication::class)->handle($application->id);
+        $this->assertNotNull($attempt);
+        $attempt->kind = ApplyAttemptKind::Retryable;
+        $attempt->stop_reason = 'form_validation';
+        $attempt->save();
+
+        $job = new SubmitApplicationJob($application->id);
+        $job->failed(new \RuntimeException('boom'));
+
+        $attempt->refresh();
+        $this->assertSame(ApplyAttemptKind::Retryable, $attempt->kind);
+        $this->assertSame('form_validation', $attempt->stop_reason);
     }
 
     public function test_per_job_approve_route_is_404(): void

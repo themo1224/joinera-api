@@ -28,11 +28,16 @@ class ModeBFailureCatalogTest extends TestCase
             'captcha' => ['captcha', 'Captcha'],
             'login_wall' => ['login_wall', 'account login'],
             'missing_company_apply_url' => ['missing_company_apply_url', 'board-only'],
+            'apply_url_not_found' => ['apply_url_not_found', 'not found'],
             'profile_incomplete' => ['profile_incomplete', 'missing required apply'],
             'mailbox_not_ready' => ['mailbox_not_ready', 'GMX apply mailbox'],
             'confirmation_not_found' => ['confirmation_not_found', 'thank-you'],
             'empty_document_upload' => ['empty_document_upload', 'empty on a present form slot'],
             'missing_artifacts' => ['missing_artifacts', 'CV or cover letter'],
+            'worker_timeout' => ['worker_timeout', 'browser worker timed out'],
+            'softgarden_personal_incomplete' => ['softgarden_personal_incomplete', 'personal step incomplete'],
+            'softgarden_cv_not_ready' => ['softgarden_cv_not_ready', 'CV not accepted'],
+            'softgarden_waiting_letzten' => ['softgarden_waiting_letzten', 'next-step CTA'],
         ];
     }
 

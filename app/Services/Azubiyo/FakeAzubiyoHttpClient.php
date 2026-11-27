@@ -44,9 +44,10 @@ class FakeAzubiyoHttpClient implements AzubiyoHttpClient
     {
         $this->requestedUrls[] = $url;
 
+        $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?: ''));
         $path = parse_url($url, PHP_URL_PATH) ?: '/';
         $query = parse_url($url, PHP_URL_QUERY) ?: '';
-        $fixture = $this->resolveFixture($path, $query);
+        $fixture = $this->resolveFixture($host, $path, $query);
 
         $file = $this->fixturesRoot.DIRECTORY_SEPARATOR.$fixture;
 
@@ -63,14 +64,30 @@ class FakeAzubiyoHttpClient implements AzubiyoHttpClient
         return $body;
     }
 
-    private function resolveFixture(string $path, string $query): string
+    private function resolveFixture(string $host, string $path, string $query): string
     {
-        $haystack = $path.($query !== '' ? '?'.$query : '');
+        $haystack = $host.$path.($query !== '' ? '?'.$query : '');
+
+        // Exit interstitial before path overrides / detail fixtures (overrides often
+        // key on external_id, which also appears in …/{id}/bewerben/ URLs).
+        if (preg_match('#/stellenanzeigen/.+/bewerben/?$#i', $path) === 1) {
+            foreach ($this->pathOverrides as $needle => $fixture) {
+                if ($needle !== '' && str_contains($haystack, $needle) && str_contains($needle, 'bewerben')) {
+                    return $fixture;
+                }
+            }
+
+            return 'bewerben_interstitial.html';
+        }
 
         foreach ($this->pathOverrides as $needle => $fixture) {
             if ($needle !== '' && str_contains($haystack, $needle)) {
                 return $fixture;
             }
+        }
+
+        if ($host === 'aplitrak.com' || str_ends_with($host, '.aplitrak.com')) {
+            return 'aplitrak_meta_refresh.html';
         }
 
         // Detail before search: slug paths like /stellenanzeigen/ausbildung-..._

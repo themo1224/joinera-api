@@ -11,6 +11,7 @@ use App\Models\Application;
 use App\Models\ApplyAttempt;
 use App\Models\MailboxIdentity;
 use App\Models\SiteIdentity;
+use App\Services\Azubiyo\AzubiyoExternalApplyResolver;
 use App\Support\ApplyUrlPreference;
 use App\Support\GmxAddressValidator;
 use Illuminate\Support\Facades\DB;
@@ -68,7 +69,24 @@ class ClaimApplyingApplication
 
             $target = $this->applyTarget($application);
 
+            // Azubiyo intake may have stored the /bewerben/ exit URL before interstitial
+            // resolution existed — upgrade the listing once before failing closed.
+            if ($target === 'board') {
+                $application->loadMissing('listing');
+                $listing = $application->listing;
+                if ($listing !== null && (string) ($application->site ?: $listing->source) === 'azubiyo') {
+                    $target = app(AzubiyoExternalApplyResolver::class)->upgradeListingApplyUrl($listing);
+                    $application->unsetRelation('listing');
+                }
+            }
+
             if ($target === 'company') {
+                $application->loadMissing('listing');
+                $probeUrl = $application->listing?->apply_url ?: $application->listing?->url;
+                if (app(ProbeCompanyApplyUrl::class)->isDead(is_string($probeUrl) ? $probeUrl : null)) {
+                    return $this->finalizeHardFail($application, 'apply_url_not_found');
+                }
+
                 $attempt = new ApplyAttempt;
                 $attempt->application_id = $application->id;
                 $attempt->kind = null;

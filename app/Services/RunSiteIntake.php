@@ -8,6 +8,7 @@ use App\Exceptions\ListingDroppedException;
 use App\Jobs\RecordIntakeSiteRepeatedFailureAlert;
 use App\Models\IntakeRun;
 use App\Models\IntakeRunSite;
+use App\Models\Listing;
 use Throwable;
 
 class RunSiteIntake
@@ -35,11 +36,15 @@ class RunSiteIntake
             $created = 0;
 
             foreach ($items as $item) {
-                $detail = $adapter->parseDetail($item);
-
                 try {
+                    $detail = $adapter->parseDetail($item);
                     $result = $this->upsertListing->handle($site, $detail);
-                } catch (ListingDroppedException|IntakeIdentityContextException) {
+                } catch (ListingDroppedException $exception) {
+                    // Re-see of expired/dead apply targets: clear apply_url so Mode B
+                    // cannot keep using a known-unapplyable company link.
+                    $this->clearListingApplyUrlOnDrop($site, $item);
+                    continue;
+                } catch (IntakeIdentityContextException) {
                     continue;
                 }
 
@@ -61,6 +66,30 @@ class RunSiteIntake
 
             return $result;
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $listItem
+     */
+    private function clearListingApplyUrlOnDrop(string $site, array $listItem): void
+    {
+        $externalId = $listItem['external_id'] ?? null;
+
+        if (! is_string($externalId) || $externalId === '') {
+            return;
+        }
+
+        $listing = Listing::query()
+            ->where('source', $site)
+            ->where('external_id', $externalId)
+            ->first();
+
+        if ($listing === null || $listing->apply_url === null || $listing->apply_url === '') {
+            return;
+        }
+
+        $listing->apply_url = null;
+        $listing->save();
     }
 
     private function recordSite(

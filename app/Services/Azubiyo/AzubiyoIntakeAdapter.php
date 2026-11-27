@@ -4,6 +4,8 @@ namespace App\Services\Azubiyo;
 
 use App\Contracts\AzubiyoHttpClient;
 use App\Contracts\SiteIntakeAdapter;
+use App\Exceptions\ListingDroppedException;
+use App\Services\ProbeCompanyApplyUrl;
 use App\Support\ApplyUrlPreference;
 use DOMDocument;
 use DOMElement;
@@ -20,6 +22,9 @@ use RuntimeException;
  *
  * Detail: application/ld+json JobPosting; Schulabschluss: … fallback;
  * a[Bewerb…] with href containing bewerben for apply_url.
+ * Board /stellenanzeigen/…/bewerben/ is an exit interstitial (“Du verlässt
+ * jetzt Azubiyo…”) — intake fetches it and stores the off-board company URL
+ * from setApplication / “hier” link (not the board exit URL).
  * external_id = trailing token after last `_` on
  * /stellenanzeigen/{slug}_{id}/ (never JobPosting identifier / Ausbildung.de UUID).
  *
@@ -31,9 +36,14 @@ class AzubiyoIntakeAdapter implements SiteIntakeAdapter
 {
     private const EXTERNAL_ID_PATTERN = '#/stellenanzeigen/[^/]+_([a-z0-9]+)/?$#i';
 
+    private readonly AzubiyoExternalApplyResolver $externalApplyResolver;
+
     public function __construct(
         private readonly AzubiyoHttpClient $http,
-    ) {}
+        ?AzubiyoExternalApplyResolver $externalApplyResolver = null,
+    ) {
+        $this->externalApplyResolver = $externalApplyResolver ?? new AzubiyoExternalApplyResolver($http);
+    }
 
     /**
      * @return array<string, mixed>
@@ -147,6 +157,11 @@ class AzubiyoIntakeAdapter implements SiteIntakeAdapter
         }
 
         $html = $this->http->get($url);
+
+        if ($this->isExpiredDetailHtml($html)) {
+            throw new ListingDroppedException('Azubiyo listing is no longer available.');
+        }
+
         $jobPosting = $this->extractJobPosting($html);
         [$dom, $xpath] = $this->loadDom($html);
 
@@ -167,7 +182,19 @@ class AzubiyoIntakeAdapter implements SiteIntakeAdapter
             ?? $this->firstText($xpath, $dom, '//*[@data-azy-description]');
 
         $education = $this->extractEducationRequirement($jobPosting, $xpath, $dom);
-        $applyUrl = $this->extractApplyUrl($xpath, $dom, $url);
+        $applyUrl = $this->externalApplyResolver->resolve(
+            $this->extractApplyUrl($xpath, $dom, $url),
+        );
+
+        // Final company apply_url already 404/410 → never enter listings as applyable.
+        if (
+            is_string($applyUrl)
+            && ApplyUrlPreference::applyTarget('azubiyo', $applyUrl) === 'company'
+            && app(ProbeCompanyApplyUrl::class)->isDead($applyUrl)
+        ) {
+            throw new ListingDroppedException('Company apply URL is not found (404/410).');
+        }
+
         $postedAt = $this->nonEmptyString($jobPosting['datePosted'] ?? null)
             ?? $this->firstAttribute($xpath, $dom, '//*[@data-azy-posted-at]', 'data-azy-posted-at');
         $externalId = $this->resolveExternalId($listItem, $url);
@@ -431,6 +458,22 @@ class AzubiyoIntakeAdapter implements SiteIntakeAdapter
         }
 
         return null;
+    }
+
+    /**
+     * Azubiyo keeps expired postings reachable with “nicht mehr verfügbar”
+     * copy while /bewerben/ still embeds a dead company URL.
+     */
+    private function isExpiredDetailHtml(string $html): bool
+    {
+        if ($html === '') {
+            return false;
+        }
+
+        return preg_match(
+            '/(?:aufgerufene\s+)?Stelle(?:nanzeige)?\s+ist\s+leider\s+nicht(?:\s+oder\s+nicht\s+mehr|\s+mehr)\s+verf/iu',
+            $html,
+        ) === 1;
     }
 
     private function extractApplyUrl(DOMXPath $xpath, DOMDocument $dom, string $listingUrl): ?string

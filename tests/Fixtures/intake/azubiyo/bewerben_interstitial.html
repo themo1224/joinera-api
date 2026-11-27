@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Du verlässt jetzt Azubiyo…</title>
+  <base href="https://www.azubiyo.de/" />
+</head>
+<body data-joinera-fixture="bewerben-interstitial">
+  <main>
+    <div data-ng-controller="JobOfferApplicationController"
+         data-ng-init="setApplication(2, &quot;https://karriere.firma.example.test/jobs/apply?ref=1\u0026utm_source=azubiyo&quot;, false)">
+      <h2>Du verlässt jetzt Azubiyo...</h2>
+      <p class="text-center text-secondary">
+        ... und wirst zum Bewerbungssystem weitergeleitet.
+      </p>
+      <span class="text-secondary text-center">
+        Dann klicke bitte
+        <a href="https://karriere.firma.example.test/jobs/apply?ref=1&amp;utm_source=azubiyo">hier</a>,
+        um zum Bewerbungssystem zu gelangen.
+      </span>
+      <button class="btn btn-primary"
+              data-ng-click="copyTextToClipboard($event, 'https://karriere.firma.example.test/jobs/apply?ref=1&amp;utm_source=azubiyo', 'Link kopiert')">
+        Link kopieren
+      </button>
+    </div>
+  </main>
+</body>
+</html>

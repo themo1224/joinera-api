@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\IntakeRunSiteStatus;
+use App\Exceptions\ListingDroppedException;
 use App\Models\IntakeRun;
 use App\Models\IntakeRunSite;
 use App\Models\Listing;
@@ -11,15 +12,28 @@ use App\Services\Azubiyo\AzubiyoIntakeAdapter;
 use App\Services\Azubiyo\FakeAzubiyoHttpClient;
 use App\Services\FixtureSiteIntakeAdapter;
 use App\Services\SiteIntakeAdapterRegistry;
+use App\Services\RunSiteIntake;
 use App\Services\ThrowingSiteIntakeAdapter;
 use App\Services\UpsertListing;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class AzubiyoIntakeAdapterTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // ProbeCompanyApplyUrl uses Laravel Http (not FakeAzubiyoHttpClient).
+        // Default live so intake fixtures do not hang on DNS timeouts.
+        Http::fake([
+            '*' => Http::response('ok', 200),
+        ]);
+    }
 
     public function test_fake_http_client_returns_search_fixture_bytes(): void
     {
@@ -195,6 +209,10 @@ class AzubiyoIntakeAdapterTest extends TestCase
 
     public function test_parse_detail_prefers_off_board_company_apply_url(): void
     {
+        $this->mock(\App\Services\ProbeCompanyApplyUrl::class, function ($mock): void {
+            $mock->shouldReceive('isDead')->andReturn(false);
+        });
+
         $listingUrl = 'https://www.azubiyo.de/stellenanzeigen/ausbildung-zum-kaufmann-fuer-bueromanagement-m-w-d_expert_66195a74/';
         $fake = (new FakeAzubiyoHttpClient)->withPathOverrides([
             '66195a74' => 'detail_with_company_apply.html',
@@ -216,6 +234,225 @@ class AzubiyoIntakeAdapterTest extends TestCase
             $detail['apply_url'],
         );
         $this->assertStringNotContainsString('azubiyo.de', (string) $detail['apply_url']);
+    }
+
+    public function test_parse_detail_follows_bewerben_interstitial_to_company_url(): void
+    {
+        $listingUrl = 'https://www.azubiyo.de/stellenanzeigen/ausbildung-kaufmann_beispiel_83c77e3c/';
+        $fake = (new FakeAzubiyoHttpClient)->withPathOverrides([
+            '83c77e3c' => 'detail_board_bewerben_only.html',
+            '/bewerben' => 'bewerben_interstitial.html',
+        ]);
+        $adapter = new AzubiyoIntakeAdapter($fake);
+
+        $detail = $adapter->parseDetail([
+            'external_id' => '83c77e3c',
+            'url' => $listingUrl,
+            'title' => 'Ausbildung Kaufmann (m/w/d)',
+            'company' => 'Beispiel GmbH',
+            'city' => '20095 Hamburg',
+            'kind' => 'ausbildung',
+        ]);
+
+        $this->assertSame(
+            'https://karriere.firma.example.test/jobs/apply?ref=1&utm_source=azubiyo',
+            $detail['apply_url'],
+        );
+        $this->assertStringNotContainsString('azubiyo.de', (string) $detail['apply_url']);
+        $this->assertTrue(
+            collect($fake->requestedUrls)->contains(
+                fn (string $url): bool => str_contains($url, '/bewerben'),
+            ),
+        );
+    }
+
+    public function test_parse_detail_drops_expired_board_listing(): void
+    {
+        $listingUrl = 'https://www.azubiyo.de/stellenanzeigen/ausbildung-kaufmann-im-einzelhandel-092026-m-w-d_lidl_2914d28b/';
+        $fake = (new FakeAzubiyoHttpClient)->withPathOverrides([
+            '2914d28b' => 'detail_expired.html',
+        ]);
+        $adapter = new AzubiyoIntakeAdapter($fake);
+
+        $this->expectException(ListingDroppedException::class);
+        $this->expectExceptionMessage('no longer available');
+
+        $adapter->parseDetail([
+            'external_id' => '2914d28b',
+            'url' => $listingUrl,
+            'title' => 'Ausbildung Kaufmann im Einzelhandel 09.2026 (m/w/d)',
+            'company' => 'Lidl',
+            'city' => '69126 Heidelberg',
+            'kind' => 'ausbildung',
+        ]);
+    }
+
+    public function test_parse_detail_unwraps_aplitrak_meta_refresh_to_employer_url(): void
+    {
+        $this->mock(\App\Services\ProbeCompanyApplyUrl::class, function ($mock): void {
+            $mock->shouldReceive('isDead')->andReturn(false);
+        });
+
+        $listingUrl = 'https://www.azubiyo.de/stellenanzeigen/ausbildung-zum-kaufmann-im-einzelhandel-m-w-d-weis_deichmann_6ag5dad4/';
+        $fake = (new FakeAzubiyoHttpClient)->withPathOverrides([
+            '6ag5dad4' => 'detail_board_bewerben_only.html',
+            '/bewerben' => 'bewerben_interstitial_aplitrak.html',
+        ]);
+        $adapter = new AzubiyoIntakeAdapter($fake);
+
+        $detail = $adapter->parseDetail([
+            'external_id' => '6ag5dad4',
+            'url' => $listingUrl,
+            'title' => 'Ausbildung zum Kaufmann im Einzelhandel (m/w/d), Weißenburg',
+            'company' => 'Deichmann SE',
+            'city' => '91781 Weißenburg',
+            'kind' => 'ausbildung',
+        ]);
+
+        $this->assertSame(
+            'https://www.deichmann-karriere.example.test/jobs/2025-30166/application-form/?utm_source=azubiyo',
+            $detail['apply_url'],
+        );
+        $this->assertStringNotContainsString('aplitrak.com', (string) $detail['apply_url']);
+        $this->assertTrue(
+            collect($fake->requestedUrls)->contains(
+                fn (string $url): bool => str_contains($url, 'aplitrak.com'),
+            ),
+        );
+    }
+
+    public function test_parse_detail_drops_when_company_apply_url_is_404(): void
+    {
+        $this->mock(\App\Services\ProbeCompanyApplyUrl::class, function ($mock): void {
+            $mock->shouldReceive('isDead')
+                ->once()
+                ->with('https://jobs.dead.example.test/jobs/gone-404/bewerben')
+                ->andReturn(true);
+        });
+
+        $listingUrl = 'https://www.azubiyo.de/stellenanzeigen/ausbildung-dead-link_dead-corp_deadcafe1/';
+        $fake = (new FakeAzubiyoHttpClient)->withPathOverrides([
+            'deadcafe1' => 'detail_with_dead_company_apply.html',
+        ]);
+        $adapter = new AzubiyoIntakeAdapter($fake);
+
+        $this->expectException(ListingDroppedException::class);
+        $this->expectExceptionMessage('404/410');
+
+        $adapter->parseDetail([
+            'external_id' => 'deadcafe1',
+            'url' => $listingUrl,
+            'title' => 'Ausbildung Dead Link (m/w/d)',
+            'company' => 'Dead Corp',
+            'city' => '10115 Berlin',
+            'kind' => 'ausbildung',
+        ]);
+    }
+
+    public function test_parse_detail_keeps_live_company_apply_url(): void
+    {
+        $this->mock(\App\Services\ProbeCompanyApplyUrl::class, function ($mock): void {
+            $mock->shouldReceive('isDead')->andReturn(false);
+        });
+
+        $listingUrl = 'https://www.azubiyo.de/stellenanzeigen/ausbildung-zum-kaufmann-fuer-bueromanagement-m-w-d_expert_66195a74/';
+        $fake = (new FakeAzubiyoHttpClient)->withPathOverrides([
+            '66195a74' => 'detail_with_company_apply.html',
+        ]);
+        $adapter = new AzubiyoIntakeAdapter($fake);
+
+        $detail = $adapter->parseDetail([
+            'external_id' => '66195a74',
+            'url' => $listingUrl,
+            'title' => 'Ausbildung zum Kaufmann für Büromanagement (m/w/d)',
+            'company' => 'NDB ELEKTROTECHNIK GmbH & Co. KG',
+            'city' => '21684 Stade',
+            'kind' => 'ausbildung',
+        ]);
+
+        $this->assertSame(
+            'https://karriere.ndb-elektro.example.test/jobs/bueromanagement/bewerben',
+            $detail['apply_url'],
+        );
+    }
+
+    public function test_parse_detail_drops_aplitrak_unwrap_that_lands_on_404(): void
+    {
+        $this->mock(\App\Services\ProbeCompanyApplyUrl::class, function ($mock): void {
+            $mock->shouldReceive('isDead')
+                ->once()
+                ->with('https://www.deichmann-karriere.example.test/jobs/2025-30166/application-form/?utm_source=azubiyo')
+                ->andReturn(true);
+        });
+
+        $listingUrl = 'https://www.azubiyo.de/stellenanzeigen/ausbildung-zum-kaufmann-im-einzelhandel-m-w-d-weis_deichmann_6ag5dad4/';
+        $fake = (new FakeAzubiyoHttpClient)->withPathOverrides([
+            '6ag5dad4' => 'detail_board_bewerben_only.html',
+            '/bewerben' => 'bewerben_interstitial_aplitrak.html',
+        ]);
+        $adapter = new AzubiyoIntakeAdapter($fake);
+
+        $this->expectException(ListingDroppedException::class);
+        $this->expectExceptionMessage('404/410');
+
+        $adapter->parseDetail([
+            'external_id' => '6ag5dad4',
+            'url' => $listingUrl,
+            'title' => 'Ausbildung zum Kaufmann im Einzelhandel (m/w/d), Weißenburg',
+            'company' => 'Deichmann SE',
+            'city' => '91781 Weißenburg',
+            'kind' => 'ausbildung',
+        ]);
+    }
+
+    public function test_intake_drop_clears_existing_apply_url_on_resee(): void
+    {
+        Event::fake();
+        $this->mock(\App\Services\ProbeCompanyApplyUrl::class, function ($mock): void {
+            $mock->shouldReceive('isDead')->andReturn(true);
+        });
+
+        $listing = Listing::factory()->forSource('azubiyo')->create([
+            'external_id' => 'deadcafe1',
+            'url' => 'https://www.azubiyo.de/stellenanzeigen/ausbildung-dead-link_dead-corp_deadcafe1/',
+            'apply_url' => 'https://jobs.dead.example.test/jobs/gone-404/bewerben',
+        ]);
+
+        $fake = (new FakeAzubiyoHttpClient)->withPathOverrides([
+            'deadcafe1' => 'detail_with_dead_company_apply.html',
+        ]);
+
+        $adapter = new class($fake) extends AzubiyoIntakeAdapter
+        {
+            public function search(): array
+            {
+                return ['pages' => [['page' => 1, 'url' => 'x', 'body' => '']], 'body' => ''];
+            }
+
+            public function parseList(array $searchResult): array
+            {
+                return [[
+                    'external_id' => 'deadcafe1',
+                    'url' => 'https://www.azubiyo.de/stellenanzeigen/ausbildung-dead-link_dead-corp_deadcafe1/',
+                    'title' => 'Ausbildung Dead Link (m/w/d)',
+                    'company' => 'Dead Corp',
+                    'city' => '10115 Berlin',
+                    'kind' => 'ausbildung',
+                ]];
+            }
+        };
+        $this->app->make(SiteIntakeAdapterRegistry::class)->register('azubiyo', $adapter);
+
+        $run = IntakeRun::query()->create([
+            'started_at' => now(),
+            'finished_at' => null,
+        ]);
+
+        $site = app(RunSiteIntake::class)->handle($run, 'azubiyo');
+
+        $this->assertSame(IntakeRunSiteStatus::Ok, $site->status);
+        $this->assertSame(0, $site->listings_created);
+        $this->assertNull($listing->fresh()->apply_url);
     }
 
     public function test_parse_detail_then_upsert_creates_once_and_dedupes_by_external_id(): void

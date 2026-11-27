@@ -3,6 +3,7 @@
 namespace App\Services\Ai;
 
 use App\Contracts\LlmClient;
+use App\Exceptions\AiUnavailableException;
 use App\Exceptions\LlmRequestException;
 use App\Support\LlmChatResult;
 use Illuminate\Http\Client\ConnectionException;
@@ -16,7 +17,10 @@ class OpenRouterLlmClient implements LlmClient
         $apiKey = trim((string) config('joinera.ai.openrouter.api_key'));
 
         if ($apiKey === '') {
-            throw new LlmRequestException('OPENROUTER_API_KEY is not configured.');
+            throw new AiUnavailableException(
+                AiUnavailableException::CODE_NOT_CONFIGURED,
+                'AI is not configured (OPENROUTER_API_KEY is missing).',
+            );
         }
 
         $model = trim((string) config('joinera.ai.openrouter.model', 'openrouter/free'));
@@ -115,6 +119,13 @@ class OpenRouterLlmClient implements LlmClient
                 ? (string) data_get($body, 'error.message', $response->body())
                 : $response->body();
 
+            if ($response->status() === 402 || $this->looksLikeInsufficientCredit($message)) {
+                throw new AiUnavailableException(
+                    AiUnavailableException::CODE_NO_CREDIT,
+                    'No AI credit remaining.',
+                );
+            }
+
             throw new LlmRequestException(
                 'OpenRouter request failed: '.$message,
                 $response->status(),
@@ -141,5 +152,15 @@ class OpenRouterLlmClient implements LlmClient
             finishReason: is_string($finishReason) ? $finishReason : null,
             usage: is_array($usage) ? $usage : null,
         );
+    }
+
+    private function looksLikeInsufficientCredit(string $message): bool
+    {
+        $lower = strtolower($message);
+
+        return str_contains($lower, 'insufficient credits')
+            || str_contains($lower, 'insufficient credit')
+            || str_contains($lower, 'no credits')
+            || str_contains($lower, 'credit balance');
     }
 }

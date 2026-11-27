@@ -3,10 +3,12 @@
 namespace Tests\Unit;
 
 use App\Contracts\LlmClient;
+use App\Exceptions\AiUnavailableException;
 use App\Exceptions\LlmRequestException;
 use App\Services\Ai\FakeLlmClient;
 use App\Services\Ai\OpenRouterLlmClient;
 use Illuminate\Support\Facades\Http;
+use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
 class OpenRouterLlmClientTest extends TestCase
@@ -156,6 +158,56 @@ class OpenRouterLlmClientTest extends TestCase
         app(OpenRouterLlmClient::class)->chat([
             ['role' => 'user', 'content' => 'hi'],
         ]);
+    }
+
+    #[Test]
+    public function test_open_router_chat_maps_402_to_no_credit(): void
+    {
+        config([
+            'joinera.ai.openrouter.api_key' => 'test-key',
+            'joinera.ai.openrouter.base_url' => 'https://openrouter.ai/api/v1',
+            'joinera.ai.openrouter.model' => 'openrouter/free',
+            'joinera.ai.openrouter.fallback_models' => [],
+        ]);
+
+        Http::fake([
+            'openrouter.ai/api/v1/chat/completions' => Http::response([
+                'error' => [
+                    'message' => 'Insufficient credits',
+                ],
+            ], 402),
+        ]);
+
+        try {
+            app(OpenRouterLlmClient::class)->chat([
+                ['role' => 'user', 'content' => 'hi'],
+            ]);
+            $this->fail('Expected AiUnavailableException');
+        } catch (AiUnavailableException $e) {
+            $this->assertSame(AiUnavailableException::CODE_NO_CREDIT, $e->errorCode);
+        }
+    }
+
+    #[Test]
+    public function test_open_router_chat_maps_missing_key_to_not_configured(): void
+    {
+        config([
+            'joinera.ai.openrouter.api_key' => '',
+            'joinera.ai.openrouter.model' => 'openrouter/free',
+        ]);
+
+        Http::fake();
+
+        try {
+            app(OpenRouterLlmClient::class)->chat([
+                ['role' => 'user', 'content' => 'hi'],
+            ]);
+            $this->fail('Expected AiUnavailableException');
+        } catch (AiUnavailableException $e) {
+            $this->assertSame(AiUnavailableException::CODE_NOT_CONFIGURED, $e->errorCode);
+        }
+
+        Http::assertNothingSent();
     }
 
     public function test_fake_llm_returns_deterministic_cover_stub(): void

@@ -3,6 +3,7 @@
 namespace App\Services\Ai;
 
 use App\Contracts\LlmClient;
+use App\Exceptions\AiUnavailableException;
 use App\Exceptions\LlmRequestException;
 use App\Support\LlmChatResult;
 use Illuminate\Http\Client\ConnectionException;
@@ -20,7 +21,10 @@ class GeminiLlmClient implements LlmClient
     {
         $apiKey = trim((string) config('joinera.ai.gemini.api_key'));
         if ($apiKey === '') {
-            throw new LlmRequestException('GEMINI_API_KEY is not configured.');
+            throw new AiUnavailableException(
+                AiUnavailableException::CODE_NOT_CONFIGURED,
+                'AI is not configured (GEMINI_API_KEY is missing).',
+            );
         }
 
         $models = $this->modelCandidates();

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\ModeBBrowserOutcome;
 use App\Services\Apply\HttpModeBBrowserAdapter;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -73,6 +74,23 @@ class HttpModeBBrowserAdapterTest extends TestCase
         $result = app(HttpModeBBrowserAdapter::class)->submit(1, 'azubiyo', 1);
 
         $this->assertSame(ModeBBrowserOutcome::Retryable, $result->outcome);
+        $this->assertSame('worker_http_503', $result->detail);
+    }
+
+    public function test_connection_timeout_is_retryable_worker_timeout(): void
+    {
+        Http::fake([
+            'http://mode-b-worker.test/submit' => function () {
+                throw new ConnectionException(
+                    'cURL error 28: Operation timed out after 120001 milliseconds with 0 bytes received'
+                );
+            },
+        ]);
+
+        $result = app(HttpModeBBrowserAdapter::class)->submit(1, 'azubiyo', 1);
+
+        $this->assertSame(ModeBBrowserOutcome::Retryable, $result->outcome);
+        $this->assertSame('worker_timeout', $result->detail);
     }
 
     public function test_maps_form_plan_on_identity_mismatch(): void

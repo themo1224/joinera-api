@@ -4,8 +4,10 @@ namespace App\Services\Apply;
 
 use App\Contracts\ModeBBrowserPort;
 use App\Enums\ModeBBrowserOutcome;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
+use Throwable;
 
 /**
  * Calls the external Playwright Mode B worker over HTTP.
@@ -23,14 +25,24 @@ class HttpModeBBrowserAdapter implements ModeBBrowserPort
             throw new RuntimeException('joinera.mode_b.worker_url is not configured.');
         }
 
-        $response = Http::timeout($timeout)
-            ->acceptJson()
-            ->withHeaders($secret !== '' ? ['X-Mode-B-Worker-Secret' => $secret] : [])
-            ->post($base.'/submit', [
-                'user_id' => $userId,
-                'site_id' => $siteId,
-                'application_id' => $applicationId,
-            ]);
+        try {
+            $response = Http::timeout($timeout)
+                ->acceptJson()
+                ->withHeaders($secret !== '' ? ['X-Mode-B-Worker-Secret' => $secret] : [])
+                ->post($base.'/submit', [
+                    'user_id' => $userId,
+                    'site_id' => $siteId,
+                    'application_id' => $applicationId,
+                ]);
+        } catch (ConnectionException $e) {
+            // cURL 28 / connect refused — finalize as retryable so ApplyAttempt is not left Open.
+            return ModeBBrowserResult::retryable('worker_timeout');
+        } catch (Throwable $e) {
+            if ($this->isTimeoutLike($e)) {
+                return ModeBBrowserResult::retryable('worker_timeout');
+            }
+            throw $e;
+        }
 
         if (! $response->successful()) {
             return ModeBBrowserResult::retryable('worker_http_'.$response->status());
@@ -64,5 +76,15 @@ class HttpModeBBrowserAdapter implements ModeBBrowserPort
             ModeBBrowserOutcome::Challenge => ModeBBrowserResult::challenge($detail, $formPlan),
             ModeBBrowserOutcome::Retryable => ModeBBrowserResult::retryable($detail, $formPlan),
         };
+    }
+
+    private function isTimeoutLike(Throwable $e): bool
+    {
+        $msg = strtolower($e->getMessage());
+
+        return str_contains($msg, 'timed out')
+            || str_contains($msg, 'timeout')
+            || str_contains($msg, 'curl error 28')
+            || str_contains($msg, 'operation timed out');
     }
 }

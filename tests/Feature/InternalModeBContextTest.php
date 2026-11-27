@@ -64,7 +64,12 @@ class InternalModeBContextTest extends TestCase
             ->assertJsonPath('candidate.city', ['Berlin'])
             ->assertJsonPath('candidate.education', 'Mittlere Reife')
             ->assertJsonPath('candidate.desired_path', 'ausbildung')
-            ->assertJsonPath('candidate.willing_to_relocate', true);
+            ->assertJsonPath('candidate.willing_to_relocate', true)
+            ->assertJsonPath('candidate.company', 'IU Duales Studium')
+            ->assertJsonPath(
+                'candidate.listing_title',
+                'Duales Studium BWL - Spezialisierung Handelsmanagement (B.A.) am Campus oder virtuell',
+            );
 
         $this->assertIsString($response->json('artifacts.cv.url'));
         $this->assertIsString($response->json('artifacts.cover.url'));
@@ -172,6 +177,8 @@ class InternalModeBContextTest extends TestCase
         ]);
 
         $listing = Listing::factory()->forSource('azubiyo')->create([
+            'title' => 'Duales Studium BWL - Spezialisierung Handelsmanagement (B.A.) am Campus oder virtuell',
+            'company' => 'IU Duales Studium',
             'url' => 'https://www.azubiyo.de/stellen/1',
             'apply_url' => 'https://www.azubiyo.de/stellen/1/bewerben',
         ]);

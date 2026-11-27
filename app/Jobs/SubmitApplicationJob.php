@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Contracts\ModeBSubmitAfterDocsReady;
 use App\Enums\ApplyAttemptKind;
 use App\Models\Application;
+use App\Models\ApplyAttempt;
 use App\Services\Apply\ApplySlotLimiter;
 use App\Services\AssertApplicationDocsReadyForModeB;
 use App\Services\ClaimApplyingApplication;
@@ -12,6 +13,7 @@ use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
+use Throwable;
 
 /**
  * Mode B submit job — claim applying, gate on docs readiness, then Plan 3 hook.
@@ -94,5 +96,52 @@ class SubmitApplicationJob implements ShouldBeUnique, ShouldQueue
         }
 
         $afterDocsReady->handle($application, $attempt);
+    }
+
+    /**
+     * Safety net: never leave ApplyAttempt kind=null after queue failure (timeout / crash / max tries).
+     * Staff admin would otherwise show "Open" forever and block RetryApply with apply_in_progress.
+     */
+    public function failed(?Throwable $e): void
+    {
+        $attempt = ApplyAttempt::query()
+            ->where('application_id', $this->applicationId)
+            ->whereNull('kind')
+            ->orderByDesc('id')
+            ->first();
+
+        if ($attempt === null) {
+            return;
+        }
+
+        $attempt->kind = ApplyAttemptKind::Retryable;
+        $attempt->stop_reason = $this->stopReasonFromFailure($e);
+        $attempt->confirmation_reference = null;
+        $attempt->save();
+    }
+
+    private function stopReasonFromFailure(?Throwable $e): string
+    {
+        if ($e === null) {
+            return 'job_failed';
+        }
+
+        $msg = strtolower($e->getMessage());
+        if (
+            str_contains($msg, 'timed out')
+            || str_contains($msg, 'timeout')
+            || str_contains($msg, 'curl error 28')
+            || str_contains($msg, 'operation timed out')
+            || str_contains($msg, 'worker_timeout')
+        ) {
+            return 'worker_timeout';
+        }
+
+        $raw = trim($e->getMessage());
+        if ($raw === '') {
+            return 'job_failed';
+        }
+
+        return mb_substr($raw, 0, 255);
     }
 }

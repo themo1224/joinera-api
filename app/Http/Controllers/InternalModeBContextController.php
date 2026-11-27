@@ -48,6 +48,16 @@ class InternalModeBContextController extends Controller
             : ModeBCandidatePack::empty();
 
         $candidate['cover_letter'] = $this->coverLetterText($application);
+        // Listing employer — maps Softgarden "Für welches Unternehmen …" / similar selects.
+        $company = trim((string) ($application->listing?->company ?? ''));
+        if ($company !== '') {
+            $candidate['company'] = $company;
+        }
+        // Listing title — maps IU OBW / Softgarden "Studiengang" selects from the vacancy name.
+        $listingTitle = trim((string) ($application->listing?->title ?? ''));
+        if ($listingTitle !== '') {
+            $candidate['listing_title'] = $listingTitle;
+        }
 
         $applyUrl = $application->listing?->apply_url ?? $application->listing?->url;
         $source = (string) ($application->site ?: $application->listing?->source ?: '');

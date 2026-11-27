@@ -110,6 +110,11 @@ class ModeBCandidatePack
             'name' => $name !== '' ? $name : null,
             // GMX apply mailbox only — never User.email / personal login.
             'apply_email' => self::gmxApplyEmail($mailbox),
+            // Optional until profile.phone ships; Softgarden/ATS often require Telefon.
+            'phone' => self::nullableString($profile?->getAttribute('phone') ?? null)
+                ?? self::nullableString(config('joinera.mode_b.fallback_phone')),
+            'salutation' => self::nullableString($profile?->getAttribute('salutation') ?? null) ?? 'Herr',
+            'job_source' => 'Ausbildung.de',
             'date_of_birth' => self::dateString($profile?->date_of_birth),
             'city' => self::list($profile?->city),
             'province' => self::list($profile?->province),

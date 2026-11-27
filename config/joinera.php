@@ -113,8 +113,19 @@ return [
         'worker_url' => rtrim((string) env('JOINERA_MODE_B_WORKER_URL', 'http://127.0.0.1:3911'), '/'),
         'worker_secret' => (string) env('JOINERA_MODE_B_WORKER_SECRET', ''),
         'timeout' => max(5, (int) env('JOINERA_MODE_B_TIMEOUT', 120)),
+        // Optional until profiles.phone exists — Softgarden often requires Telefon.
+        'fallback_phone' => (string) env('JOINERA_MODE_B_FALLBACK_PHONE', ''),
         // Legacy board Easy-Apply claim/path (Azubiyo/BA love-path probes). Default off — company site only.
         'allow_board_apply' => (bool) env('JOINERA_MODE_B_ALLOW_BOARD_APPLY', false),
+        // AI Step Navigator — worker POSTs scrubbed control snapshots; default off.
+        'ai_step_nav' => [
+            'enabled' => filter_var(env('JOINERA_MODE_B_AI_STEP_NAV', true), FILTER_VALIDATE_BOOLEAN),
+            'min_confidence' => max(0.0, min(1.0, (float) env('JOINERA_MODE_B_AI_STEP_NAV_MIN_CONFIDENCE', 0.6))),
+            'timeout' => max(3, (int) env('JOINERA_MODE_B_AI_STEP_NAV_TIMEOUT', 15)),
+            'max_tokens' => max(64, (int) env('JOINERA_MODE_B_AI_STEP_NAV_MAX_TOKENS', 200)),
+            // P1 cache TTL (seconds); unused in P0 but reserved.
+            'cache_ttl_seconds' => max(0, (int) env('JOINERA_MODE_B_AI_STEP_NAV_CACHE_TTL', 604800)),
+        ],
     ],
     // P0-13 preparing_docs: cover (+ CV when category differs) via LlmClient + PdfRenderer.
     'docs' => [
@@ -128,7 +139,10 @@ return [
         'cv_parser' => env('JOINERA_CV_PARSER', 'ingestion'),
         // tesseract | null — testing env always uses NullDocumentOcrClient.
         'ocr' => env('JOINERA_DOCUMENT_OCR', 'tesseract'),
-        // Residual text-only LLM for gaps; default off to minimize tokens.
+        // Residual text-only LLM gap-fill after heuristics/OCR (experiences, skills, name, DOB, …).
+        // Default false to minimize tokens. Enable on staging/VPS after OPENROUTER_API_KEY (or
+        // JOINERA_AI_DRIVER) is configured — heuristics alone cover clear Lebenslauf text, residual
+        // fills OCR/layout misses. Env: JOINERA_DOCUMENT_RESIDUAL_LLM=true
         'residual_llm' => (bool) env('JOINERA_DOCUMENT_RESIDUAL_LLM', false),
     ],
 
@@ -136,6 +150,8 @@ return [
     'ai' => [
         // openrouter | gemini | fake — testing env always uses Fake in AppServiceProvider.
         'driver' => env('JOINERA_AI_DRIVER', 'openrouter'),
+        // PHPUnit only: set true in a test to exercise live key/credit probes (Http::fake).
+        'force_readiness_check' => false,
         'gemini' => [
             'api_key' => env('GEMINI_API_KEY'),
             'base_url' => rtrim((string) env(
@@ -148,7 +164,7 @@ return [
                 static fn (string $model): string => trim($model),
                 explode(',', (string) env(
                     'GEMINI_FALLBACK_MODELS',
-                    'gemini-2.5-flash,gemini-3-flash-preview,gemini-flash-latest',
+                    'gemini-3.1-flash-lite-preview,gemini-3-flash-preview,gemini-flash-latest',
                 )),
             ))),
             'timeout' => max(5, (int) env('GEMINI_TIMEOUT', 180)),

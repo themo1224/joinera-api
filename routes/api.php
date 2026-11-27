@@ -5,13 +5,16 @@ use App\Http\Controllers\ApplyLimitsController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\IdentityReadinessController;
 use App\Http\Controllers\InternalModeBContextController;
+use App\Http\Controllers\InternalModeBStepNavController;
 use App\Http\Controllers\ListingImportController;
+use App\Http\Controllers\StaffListingController;
 use App\Http\Controllers\MailboxController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProfileCvController;
 use App\Http\Controllers\ProfileParseController;
 use App\Http\Controllers\ProfilePrioritiesController;
 use App\Http\Controllers\SiteIdentityController;
+use App\Http\Controllers\StaffAiReadinessController;
 use App\Http\Controllers\StaffApplicationController;
 use App\Http\Controllers\StaffApplicationDocsController;
 use App\Http\Controllers\StaffBlockEventController;
@@ -36,6 +39,7 @@ Route::prefix('v1')->group(function () {
         Route::get('applications/{application}', [InternalModeBContextController::class, 'show']);
         Route::get('applications/{application}/artifacts/{kind}', [InternalModeBContextController::class, 'artifact'])
             ->whereIn('kind', ['cv', 'cover', 'passport', 'language_cert', 'education_cert']);
+        Route::post('step-nav', InternalModeBStepNavController::class);
     });
 
     Route::middleware('auth:sanctum')->group(function () {
@@ -63,6 +67,8 @@ Route::prefix('v1')->group(function () {
         // Plan 32 / P0-14 — human-like apply limits (null layers = configured=false).
         Route::get('apply-limits', [ApplyLimitsController::class, 'show']);
 
+        Route::get('listings', [StaffListingController::class, 'index'])->middleware('staff');
+        Route::get('listings/{listing}', [StaffListingController::class, 'show'])->middleware('staff');
         Route::post('listings/import', [ListingImportController::class, 'store'])->middleware('admin');
 
         Route::get('applicants', [ApplicantController::class, 'index'])->middleware('staff');
@@ -78,6 +84,7 @@ Route::prefix('v1')->group(function () {
         Route::post('users/{user}/profile/parse', [StaffProfileController::class, 'parse'])->middleware('staff');
         Route::post('users/{user}/profile/documents', [StaffProfileController::class, 'storeDocument'])->middleware('staff');
         Route::post('users/{user}/profile/analyze-documents', [StaffProfileController::class, 'analyzeDocuments'])->middleware('staff');
+        Route::get('ai/readiness', [StaffAiReadinessController::class, 'show'])->middleware('staff');
         Route::post('users/{user}/profile/approvals', [StaffProfileController::class, 'approve'])->middleware('staff');
         Route::get('users/{user}/mailbox', [StaffMailboxController::class, 'show'])->middleware('staff');
         Route::put('users/{user}/mailbox/credentials', [StaffMailboxController::class, 'updateCredentials'])->middleware('admin');

@@ -60,4 +60,49 @@ TXT;
         $this->assertSame('Anna Schmidt', $parsed['candidate_name']);
         $this->assertCount(2, $parsed['languages']);
     }
+
+    #[Test]
+    public function it_extracts_experiences_and_inferred_skills_from_german_lebenslauf(): void
+    {
+        $text = <<<'TXT'
+Lebenslauf
+Vorname: Yassine
+Nachname: Moussaid
+
+Profil:
+Motivierter Koch mit Erfahrung in der Gastronomie. Kenntnisse in HACCP und Hygiene.
+Gäste betreuen und Bestellungen aufnehmen.
+
+BERUFLICHE ERFAHRUNG
+06/07/2026-10/08/2026 Servicekraft Restaurant MM
+- Service und Bankett
+06/2023 – 09/2023 Commis de Cuisine Mazagan Beach & Golf Resort
+- Teamwork in der Küche
+2022. Grillgehilfe Grillrestaurant Atlas
+- Zubereitung und Hygiene
+
+Sprachen
+Deutsch B2
+Arabisch Muttersprache
+TXT;
+
+        $parsed = (new CvHeuristicParser)->parse($text);
+
+        $this->assertGreaterThanOrEqual(3, count($parsed['experiences']));
+
+        $blob = mb_strtolower(json_encode($parsed['experiences'], JSON_UNESCAPED_UNICODE) ?: '');
+        $this->assertStringContainsString('restaurant mm', $blob);
+        $this->assertStringContainsString('mazagan', $blob);
+        $this->assertStringContainsString('grillrestaurant', $blob);
+
+        $this->assertGreaterThanOrEqual(1, count($parsed['skills']));
+        $skillBlob = mb_strtolower(collect($parsed['skills'])->pluck('name')->implode(' '));
+        $this->assertTrue(
+            str_contains($skillBlob, 'haccp')
+            || str_contains($skillBlob, 'service')
+            || str_contains($skillBlob, 'gastronomie')
+            || str_contains($skillBlob, 'hygiene'),
+            'Expected HACCP or service-related skill, got: '.$skillBlob
+        );
+    }
 }

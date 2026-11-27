@@ -40,7 +40,40 @@ class DocumentIngestionPipelineTest extends TestCase
         $this->assertContains('B', $result->drivingLicenses);
     }
 
-    private function makePipeline(): DocumentIngestionPipeline
+    #[Test]
+    public function it_gap_fills_empty_experiences_and_skills_via_residual_llm(): void
+    {
+        config(['joinera.documents.residual_llm' => true]);
+
+        Storage::fake('local');
+        $path = Storage::disk('local')->path('residual-cv.pdf');
+        // No date-range lines → heuristic experiences stay empty; residual must fill.
+        $this->writeMinimalTextPdf($path, "Lebenslauf\nName: Yassine Moussaid\nArbeitete als Servicekraft im Restaurant MM und als Commis im Mazagan Beach Resort. Profil: HACCP und Gäste betreuen.\nSprachkenntnisse\nDeutsch: B2");
+
+        $fake = new FakeLlmClient;
+        $fake->queueContent(json_encode([
+            'experiences' => [
+                ['title' => 'Servicekraft', 'organization' => 'Restaurant MM', 'current' => false],
+                ['title' => 'Commis', 'organization' => 'Mazagan Beach Resort', 'current' => false],
+                ['title' => 'Grillgehilfe', 'organization' => 'Grillrestaurant', 'current' => false],
+            ],
+            'skills' => [
+                ['name' => 'HACCP', 'level' => null, 'source' => 'inferred'],
+                ['name' => 'Service', 'level' => null, 'source' => 'inferred'],
+            ],
+        ], JSON_UNESCAPED_UNICODE));
+
+        $pipeline = $this->makePipeline($fake);
+        $result = $pipeline->ingestFile($path, 'Yassine Moussaid');
+
+        $this->assertSame('ran', $result->meta['residual_llm_status'] ?? null);
+        $this->assertGreaterThanOrEqual(3, count($result->experiences));
+        $this->assertGreaterThanOrEqual(1, count($result->skills));
+        $skillNames = mb_strtolower(collect($result->skills)->pluck('name')->implode(' '));
+        $this->assertTrue(str_contains($skillNames, 'haccp') || str_contains($skillNames, 'service'));
+    }
+
+    private function makePipeline(?FakeLlmClient $llm = null): DocumentIngestionPipeline
     {
         return new DocumentIngestionPipeline(
             new PdfPageTextExtractor,
@@ -52,7 +85,7 @@ class DocumentIngestionPipelineTest extends TestCase
             new EducationCertParser,
             new PassportMrzParser,
             new IdentityMismatchGuard,
-            new ResidualLlmStructurer(new FakeLlmClient),
+            new ResidualLlmStructurer($llm ?? new FakeLlmClient),
             new NullDocumentOcrClient,
             new PdfPageImageRenderer,
         );

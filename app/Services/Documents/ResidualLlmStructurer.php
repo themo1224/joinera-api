@@ -44,8 +44,13 @@ suggested_name, date_of_birth, preferred_occupation, about, education, education
 Use suggested_name for the applicant full name when present (name is accepted as an alias).
 Use ISO date YYYY-MM-DD for date_of_birth when present.
 Use CEFR levels A1-C2 or native for languages[].level.
-Do not invent names, employers, degrees, languages, or dates not supported by the text.
-Leave keys out rather than guessing.
+
+experiences: list of {title, organization, start, end, current, description}. Extract every work/praktikum entry supported by the text (German Lebenslauf date layouts included). Never fabricate employers or date ranges; omit an experience rather than inventing employer/dates.
+
+skills: list of {name, level, source}. Include explicit skills sections AND infer skills from job titles, duty bullets, and profile text when no Skills heading exists (e.g. HACCP, Service, Gäste betreuen, Bestellungen, Bankett, Teamwork). Only emit skills present in or clearly entailed by the text. Set source to "explicit" or "inferred". level may be null.
+
+Do not invent names, degrees, languages, employers, or date ranges not supported by the text.
+Omit keys that have no grounded value — except fill experiences/skills whenever the CV text supports them (including inferred skills from duties).
 PROMPT;
 
         try {
@@ -54,7 +59,7 @@ PROMPT;
                 ['role' => 'user', 'content' => "Known so far:\n".json_encode($current, JSON_UNESCAPED_UNICODE)."\n\nText:\n".$trimmed],
             ], [
                 'temperature' => 0,
-                'max_tokens' => 800,
+                'max_tokens' => 1200,
             ]);
         } catch (LlmRequestException) {
             return ['status' => 'failed', 'fields' => []];

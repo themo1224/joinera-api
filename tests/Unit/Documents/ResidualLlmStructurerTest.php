@@ -101,4 +101,36 @@ class ResidualLlmStructurerTest extends TestCase
         $this->assertSame('disabled', $result['status']);
         $this->assertSame([], $result['fields']);
     }
+
+    #[Test]
+    public function it_fills_experiences_and_inferred_skills_when_heuristic_empty(): void
+    {
+        config(['joinera.documents.residual_llm' => true]);
+
+        $fake = new FakeLlmClient;
+        $fake->queueContent(json_encode([
+            'experiences' => [
+                ['title' => 'Servicekraft', 'organization' => 'Restaurant MM', 'start' => '2026-07-06', 'end' => '2026-08-10', 'current' => false],
+                ['title' => 'Commis', 'organization' => 'Mazagan Beach & Golf Resort', 'current' => false],
+                ['title' => 'Grillgehilfe', 'organization' => 'Grillrestaurant', 'current' => false],
+            ],
+            'skills' => [
+                ['name' => 'HACCP', 'level' => null, 'source' => 'inferred'],
+                ['name' => 'Service', 'level' => null, 'source' => 'inferred'],
+            ],
+        ], JSON_UNESCAPED_UNICODE));
+
+        $text = "Lebenslauf Yassine\nArbeitete bei Restaurant MM, Mazagan Beach & Golf Resort und Grillrestaurant. Profil mit HACCP.";
+        $structurer = new ResidualLlmStructurer($fake);
+        $result = $structurer->fillGaps($text, [
+            'experiences' => [],
+            'skills' => [],
+        ]);
+
+        $this->assertSame('ran', $result['status']);
+        $this->assertGreaterThanOrEqual(3, count($result['fields']['experiences'] ?? []));
+        $this->assertGreaterThanOrEqual(1, count($result['fields']['skills'] ?? []));
+        $skillNames = mb_strtolower(collect($result['fields']['skills'])->pluck('name')->implode(' '));
+        $this->assertTrue(str_contains($skillNames, 'haccp') || str_contains($skillNames, 'service'));
+    }
 }

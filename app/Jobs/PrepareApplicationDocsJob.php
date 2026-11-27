@@ -6,10 +6,15 @@ use App\Exceptions\LlmRequestException;
 use App\Services\Docs\PrepareApplicationDocuments;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 
-class PrepareApplicationDocsJob implements ShouldBeUnique, ShouldQueue
+/**
+ * Must wait for DB commit: queue-selected runs inside a transaction and the
+ * worker can otherwise load a missing application and no-op (stuck Queued).
+ */
+class PrepareApplicationDocsJob implements ShouldBeUnique, ShouldQueue, ShouldQueueAfterCommit
 {
     use Queueable;
 

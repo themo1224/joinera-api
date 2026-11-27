@@ -9,6 +9,7 @@ use App\Exceptions\LlmRequestException;
 use App\Models\CvAsset;
 use App\Models\ProfileDocumentAsset;
 use App\Models\User;
+use App\Services\Ai\AiReadiness;
 use App\Services\Ai\FakeLlmClient;
 use App\Services\AnalyzeApplicantDocumentsWithAi;
 use App\Services\Documents\IdentityMismatchGuard;
@@ -44,7 +45,7 @@ class AnalyzeApplicantDocumentsWithAiTest extends TestCase
             ],
         ], JSON_UNESCAPED_UNICODE));
 
-        $service = new AnalyzeApplicantDocumentsWithAi($fake, new IdentityMismatchGuard);
+        $service = new AnalyzeApplicantDocumentsWithAi($fake, new IdentityMismatchGuard, new AiReadiness);
         $result = $service->handle($user);
 
         $this->assertSame('ran', $result['ingestion']->meta['ai_status'] ?? null);
@@ -66,7 +67,7 @@ class AnalyzeApplicantDocumentsWithAiTest extends TestCase
         $user = User::factory()->create(['role' => Role::User, 'name' => 'Incomplete']);
         $user->ensureProfile();
 
-        $service = new AnalyzeApplicantDocumentsWithAi(new FakeLlmClient, new IdentityMismatchGuard);
+        $service = new AnalyzeApplicantDocumentsWithAi(new FakeLlmClient, new IdentityMismatchGuard, new AiReadiness);
 
         $this->expectException(DocumentsIncompleteException::class);
         $service->handle($user);
@@ -86,7 +87,7 @@ class AnalyzeApplicantDocumentsWithAiTest extends TestCase
             }
         };
 
-        $service = new AnalyzeApplicantDocumentsWithAi($throwing, new IdentityMismatchGuard);
+        $service = new AnalyzeApplicantDocumentsWithAi($throwing, new IdentityMismatchGuard, new AiReadiness);
 
         try {
             $service->handle($user);

@@ -94,30 +94,19 @@ class StaffApplicationDocsTest extends TestCase
             ->assertNotFound();
     }
 
-    public function test_generate_while_queued_returns_409(): void
-    {
-        Queue::fake([PrepareApplicationDocsJob::class]);
-
-        $staff = User::factory()->staff()->create();
-        $application = Application::factory()->queued()->create();
-
-        $this->actingAs($staff, 'sanctum')
-            ->postJson('/api/v1/applications/'.$application->id.'/docs/generate')
-            ->assertStatus(409)
-            ->assertJsonPath('code', 'application_still_queued');
-
-        Queue::assertNothingPushed();
-    }
-
-    public function test_generate_while_preparing_docs_or_applying_dispatches_force_job(): void
+    public function test_generate_while_queued_preparing_or_applying_dispatches_force_job(): void
     {
         Queue::fake([PrepareApplicationDocsJob::class]);
         $staff = User::factory()->staff()->create();
 
-        foreach ([ApplicationStatus::PreparingDocs, ApplicationStatus::Applying] as $status) {
-            $application = Application::factory()->create([
-                'status' => $status,
-            ]);
+        foreach ([
+            ApplicationStatus::Queued,
+            ApplicationStatus::PreparingDocs,
+            ApplicationStatus::Applying,
+        ] as $status) {
+            $application = $status === ApplicationStatus::Queued
+                ? Application::factory()->queued()->create()
+                : Application::factory()->create(['status' => $status]);
 
             $this->actingAs($staff, 'sanctum')
                 ->postJson('/api/v1/applications/'.$application->id.'/docs/generate')

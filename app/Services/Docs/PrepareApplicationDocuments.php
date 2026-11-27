@@ -43,6 +43,12 @@ class PrepareApplicationDocuments
     {
         $application = Application::query()->find($applicationId);
         if ($application === null) {
+            // Typical when the job raced ahead of the queue-selected transaction commit.
+            Log::warning('docs.prepare_missing_application', [
+                'application_id' => $applicationId,
+                'force' => $force,
+            ]);
+
             return;
         }
 
@@ -50,8 +56,9 @@ class PrepareApplicationDocuments
             return;
         }
 
+        // force=true also allows Queued so Staff can recover via Admin Generate docs.
         $allowed = $force
-            ? [ApplicationStatus::PreparingDocs, ApplicationStatus::Applying]
+            ? [ApplicationStatus::Queued, ApplicationStatus::PreparingDocs, ApplicationStatus::Applying]
             : [ApplicationStatus::Queued, ApplicationStatus::PreparingDocs];
 
         if (! in_array($application->status, $allowed, true)) {

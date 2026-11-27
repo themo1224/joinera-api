@@ -5,12 +5,14 @@ namespace App\Services;
 use App\Contracts\LlmClient;
 use App\Enums\DocumentAssetKind;
 use App\Enums\ParseStatus;
+use App\Exceptions\AiUnavailableException;
 use App\Exceptions\DocumentTooLargeForAiException;
 use App\Exceptions\DocumentsIncompleteException;
 use App\Exceptions\LlmRequestException;
 use App\Models\Profile;
 use App\Models\ProfileDocumentAsset;
 use App\Models\User;
+use App\Services\Ai\AiReadiness;
 use App\Services\Documents\IdentityMismatchGuard;
 use App\Support\CvParseResult;
 use App\Support\Documents\DocumentIngestionResult;
@@ -24,18 +26,23 @@ class AnalyzeApplicantDocumentsWithAi
     public function __construct(
         private readonly LlmClient $llm,
         private readonly IdentityMismatchGuard $identityGuard,
+        private readonly AiReadiness $aiReadiness,
     ) {
     }
 
     /**
      * @return array{profile: Profile, result: CvParseResult, ingestion: DocumentIngestionResult}
      *
+     * @throws AiUnavailableException
      * @throws DocumentsIncompleteException
      * @throws DocumentTooLargeForAiException
      * @throws LlmRequestException
      */
     public function handle(User $user): array
     {
+        // Block before any PDF bytes are loaded or sent to the provider.
+        $this->aiReadiness->assertReady();
+
         $user->loadMissing(['cvAsset', 'profileDocumentAssets']);
 
         $cv = $user->cvAsset;

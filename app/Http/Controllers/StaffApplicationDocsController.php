@@ -54,14 +54,8 @@ class StaffApplicationDocsController extends Controller
 
     public function generate(Application $application): JsonResponse
     {
-        if ($application->status === ApplicationStatus::Queued) {
-            return response()->json([
-                'code' => 'application_still_queued',
-                'message' => 'Documents cannot be generated while the application is still queued.',
-            ], 409);
-        }
-
         if (! in_array($application->status, [
+            ApplicationStatus::Queued,
             ApplicationStatus::PreparingDocs,
             ApplicationStatus::Applying,
         ], true)) {
@@ -78,6 +72,7 @@ class StaffApplicationDocsController extends Controller
             ], 409);
         }
 
+        // force=true so Queued / PreparingDocs / Applying can all re-run from Admin.
         PrepareApplicationDocsJob::dispatch($application->id, force: true);
 
         return response()->json([
